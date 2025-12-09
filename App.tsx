@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, useCallback } from 'react';
+import React, { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, CameraShake } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
@@ -19,9 +19,8 @@ import { GameState, Decoration, CeremonyState, DecorationType } from './types';
 import { CEREMONY_TARGET } from './constants';
 import { audioManager } from './utils/audio';
 
-// Helper component to animate lights (Replaced spring with simple logic to avoid type errors in previous step, kept clean here)
+// Helper component to animate lights
 const SceneLighting = ({ isLit }: { isLit: boolean }) => {
-    // Simple transition logic could be here, but for now standard lights
     return (
         <>
             <ambientLight intensity={isLit ? 0.3 : 0.02} color="#ccddff" />
@@ -72,6 +71,11 @@ const App: React.FC = () => {
   const [shakeIntensity, setShakeIntensity] = useState(0);
   const [airdropActive, setAirdropActive] = useState(false);
 
+  // Global Effects Triggers
+  const [globalFlareTrigger, setGlobalFlareTrigger] = useState(0);
+  const [heatWaveIntensity, setHeatWaveIntensity] = useState(0);
+  const lastKeyTime = useRef(0);
+
   const handleStart = (name: string, color: string) => {
     setUserName(name);
     setUserColor(color);
@@ -84,9 +88,10 @@ const App: React.FC = () => {
         setSnowAmount(prev => Math.min(prev + 0.005, 0.8));
     }, 1000);
 
-    // Shake Decay
+    // Shake Decay for heatwave
     const decay = setInterval(() => {
         setShakeIntensity(prev => Math.max(0, prev * 0.9));
+        setHeatWaveIntensity(prev => Math.max(0, prev * 0.9));
     }, 100);
 
     return () => {
@@ -95,14 +100,32 @@ const App: React.FC = () => {
     };
   }, [gameState]);
 
-  // Shake Detection
-  const handlePointerMove = (e: React.PointerEvent) => {
-      // Calculate speed
-      const speed = Math.abs(e.movementX) + Math.abs(e.movementY);
-      if (speed > 5) {
-          setShakeIntensity(prev => Math.min(1.5, prev + speed * 0.002));
-      }
-  };
+  // Keyboard Controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (gameState === 'LOBBY') return;
+        const now = Date.now();
+        // 200ms Debounce
+        if (now - lastKeyTime.current < 200) return;
+
+        if (e.key.toLowerCase() === 'g') {
+            lastKeyTime.current = now;
+            setGlobalFlareTrigger(prev => prev + 1);
+            setHeatWaveIntensity(2); // High intensity shake for heat wave
+        } else if (e.key.toLowerCase() === 'h') {
+            lastKeyTime.current = now;
+            setAirdropActive(true);
+        } else if (e.key.toLowerCase() === 'j') {
+            // FIREWORKS TRIGGER
+            lastKeyTime.current = now;
+            setFireworksPos(new THREE.Vector3(0, 4.8, 0));
+            audioManager.playFirework();
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState]);
 
   // Decoration Handler
   const handleDecorateStart = useCallback((point: THREE.Vector3) => {
@@ -141,22 +164,37 @@ const App: React.FC = () => {
   };
 
   const handleAirdropExplosion = () => {
-      // Spawn 50 decorations instantly
-      audioManager.playFirework(); // Reuse explosion sound
+      audioManager.playFirework(); 
       const newItems: Decoration[] = [];
       const types: DecorationType[] = ['orb', 'star', 'candy', 'stocking'];
       const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff'];
 
-      for(let i=0; i<50; i++) {
-          // Generate random point on cone surface (roughly)
-          // h = 0 to 4.5. radius at h = (1 - h/height) * baseRadius
-          const h = Math.random() * 3.5; // height relative to tree base (1.5)
-          const r = (1 - h / 3.5) * 1.5; // radius
+      const spawnCount = 20;
+
+      for(let i = 0; i < spawnCount; i++) {
+          // Optimized Scattering Logic
+          // 1. Pick Height (Y). Bias towards lower values to distribute evenly over cone surface area.
+          // range 0 to 1, biased towards 0
+          const distBias = 1 - Math.sqrt(Math.random());
+          
+          // Map to Tree Vertical Range: 1.5 (bottom branches) to 4.0 (top branches)
+          const minY = 1.5;
+          const maxY = 4.0;
+          const y = minY + (distBias * (maxY - minY));
+          
+          // 2. Calculate Radius at this Y
+          // Base radius at Y=1.5 is approx 1.6. Radius at top (Y=4.5) is 0.
+          // Linear cone slope calculation
+          const treeHeight = 3.0; // 4.5 - 1.5
+          const heightFromBase = y - 1.5;
+          const radiusAtY = 1.6 * (1 - (heightFromBase / treeHeight));
+          
+          // 3. Random Angle
           const theta = Math.random() * Math.PI * 2;
           
           newItems.push({
               id: uuidv4(),
-              position: [r * Math.cos(theta), 1.5 + h, r * Math.sin(theta)],
+              position: [radiusAtY * Math.cos(theta), y, radiusAtY * Math.sin(theta)],
               type: types[Math.floor(Math.random() * types.length)],
               color: colors[Math.floor(Math.random() * colors.length)],
               sender: 'Santa',
@@ -166,8 +204,16 @@ const App: React.FC = () => {
       }
       setDecorations(prev => [...prev, ...newItems]);
       
-      // Also trigger a fireworks burst at center
-      setFireworksPos(new THREE.Vector3(0, 2, 0));
+      // Also trigger a fireworks burst at top
+      setFireworksPos(new THREE.Vector3(0, 4.8, 0));
+  };
+
+  // Shake Detection for SnowGlobe particles only
+  const handlePointerMove = (e: React.PointerEvent) => {
+      const speed = Math.abs(e.movementX) + Math.abs(e.movementY);
+      if (speed > 5) {
+          setShakeIntensity(prev => Math.min(1.5, prev + speed * 0.002));
+      }
   };
 
   const isNight = true;
@@ -237,27 +283,32 @@ const App: React.FC = () => {
       )}
 
       <Canvas shadows dpr={[1, 2]}>
-        <PerspectiveCamera makeDefault position={[8, 4, 12]} fov={45} />
+        {/* Camera Reset: Positioned outside looking at center */}
+        <PerspectiveCamera makeDefault position={[0, 5, 20]} fov={45} />
         
-        {/* Dynamic Camera Shake based on intensity */}
+        {/* Heatwave Shake Effect - Only active on G key press */}
         <CameraShake 
-            maxPitch={shakeIntensity * 0.5} 
-            maxYaw={shakeIntensity * 0.5} 
-            maxRoll={shakeIntensity * 0.1} 
-            yawFrequency={shakeIntensity * 10} 
-            pitchFrequency={shakeIntensity * 10} 
-            rollFrequency={shakeIntensity * 10}
-            intensity={shakeIntensity} // Global multiplier
+            maxPitch={0.1 * heatWaveIntensity} 
+            maxYaw={0.1 * heatWaveIntensity} 
+            maxRoll={0.1 * heatWaveIntensity} 
+            yawFrequency={10} 
+            pitchFrequency={10} 
+            rollFrequency={10}
+            intensity={heatWaveIntensity} 
         />
 
+        {/* OrbitControls: Unrestricted */}
         <OrbitControls 
             enablePan={false} 
-            minPolarAngle={0} 
-            maxPolarAngle={Math.PI / 2 - 0.1}
+            enableDamping={true}
+            dampingFactor={0.05}
             minDistance={5}
-            maxDistance={25}
-            autoRotate={gameState === 'LOBBY'}
+            maxDistance={30}
+            autoRotate={true}
             autoRotateSpeed={0.5}
+            rotateSpeed={0.5}
+            target={[0, 0, 0]}
+            // Removed angle limits for full 360 freedom
         />
 
         <SceneLighting isLit={treeLit} />
@@ -271,7 +322,6 @@ const App: React.FC = () => {
                 decorations={decorations}
                 isLit={treeLit}
                 onStarClick={handleStarClick}
-                shakeIntensity={shakeIntensity}
             />
 
             <SantaAirdrop 
@@ -287,9 +337,9 @@ const App: React.FC = () => {
                 />
             )}
 
-            <Campfire position={[4, 0, 2]} />
-            <Campfire position={[-3, 0, 3]} />
-            <Campfire position={[0, 0, -5]} />
+            <Campfire position={[4, 0, 2]} flareTrigger={globalFlareTrigger} />
+            <Campfire position={[-3, 0, 3]} flareTrigger={globalFlareTrigger} />
+            <Campfire position={[0, 0, -5]} flareTrigger={globalFlareTrigger} />
 
             <Snowman position={[-3, 0, -2]} rotation={[0, 0.5, 0]} />
             <Snowman position={[2.5, 0, 4]} rotation={[0, -0.5, 0]} />

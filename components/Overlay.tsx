@@ -21,7 +21,6 @@ export const Overlay: React.FC<OverlayProps> = ({
   isLightsOn,
   onPowerClick
 }) => {
-  const [name, setName] = React.useState('');
   const [color, setColor] = React.useState('#ff0000');
   const [isMuted, setIsMuted] = useState(false);
   
@@ -31,6 +30,13 @@ export const Overlay: React.FC<OverlayProps> = ({
   const toggleMute = () => {
     const muted = audioManager.toggleMute();
     setIsMuted(muted);
+  };
+
+  const handleStart = () => {
+    const randomId = Math.floor(1000 + Math.random() * 9000);
+    const generatedName = `Guest ${randomId}`;
+    onStart(generatedName, color);
+    audioManager.startAmbience();
   };
 
   const handlePowerInteraction = () => {
@@ -65,35 +71,23 @@ export const Overlay: React.FC<OverlayProps> = ({
           
           <div className="space-y-4">
             <div>
-              <label className="block text-sm mb-1 font-[Lato]">Your Name</label>
-              <input 
-                type="text" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-black/40 border border-white/20 rounded p-3 text-white focus:outline-none focus:border-yellow-400 transition"
-                placeholder="Enter name..."
-              />
+              <label className="block text-sm mb-1 font-[Lato]">Choose Your Spirit Color</label>
+              <div className="flex items-center gap-4 bg-black/40 p-2 rounded border border-white/10">
+                 <input 
+                    type="color" 
+                    value={color} 
+                    onChange={(e) => setColor(e.target.value)}
+                    className="w-12 h-12 bg-transparent cursor-pointer rounded overflow-hidden border-none"
+                  />
+                  <span className="text-sm text-gray-400">Pick a color for your presence</span>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm mb-1 font-[Lato]">Orb Color</label>
-              <input 
-                type="color" 
-                value={color} 
-                onChange={(e) => setColor(e.target.value)}
-                className="w-full h-10 bg-transparent cursor-pointer rounded overflow-hidden"
-              />
-            </div>
+            
             <button 
-              onClick={() => {
-                  if (name) {
-                      onStart(name, color);
-                      audioManager.startAmbience();
-                  }
-              }}
-              disabled={!name}
-              className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 rounded transition duration-200 disabled:opacity-50"
+              onClick={handleStart}
+              className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 rounded transition duration-200 mt-4 text-lg"
             >
-              Enter Snow Globe
+              Play
             </button>
           </div>
         </div>

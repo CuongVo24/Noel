@@ -16,15 +16,12 @@ export const SnowGlobe: React.FC<{ isNight: boolean; shakeIntensity: number }> =
         glassRef.current.rotation.y = time * 0.02;
     }
     
-    // Blizzard Effect: Rotate the entire sparkles group rapidly when shaking
+    // Gentle Swirl only - drastically reduced reaction to shake
     if (sparklesRef.current) {
-        if (shakeIntensity > 0.1) {
-             sparklesRef.current.rotation.y += shakeIntensity * 0.1;
-             sparklesRef.current.rotation.z = Math.sin(time * 10) * shakeIntensity * 0.2;
-        } else {
-            sparklesRef.current.rotation.y += 0.005;
-            sparklesRef.current.rotation.z *= 0.95; // Return to normal
-        }
+        // Just a very subtle extra rotation if shaking, no chaotic swirling
+        sparklesRef.current.rotation.y += 0.002 + (shakeIntensity * 0.01); 
+        // Dampen the tilt
+        sparklesRef.current.rotation.z = Math.sin(time * 2) * shakeIntensity * 0.05;
     }
   });
 
@@ -101,14 +98,14 @@ export const SnowGlobe: React.FC<{ isNight: boolean; shakeIntensity: number }> =
         />
       </mesh>
 
-      {/* Falling Snow Particles */}
+      {/* Falling Snow Particles - Gentle Configuration */}
       <group ref={sparklesRef}>
         <Sparkles 
-            count={shakeIntensity > 0.5 ? 5000 : 2500}
+            count={1500} // Fixed lower count for calm atmosphere
             scale={[SNOW_GLOBE_RADIUS * 1.8, SNOW_GLOBE_RADIUS, SNOW_GLOBE_RADIUS * 1.8]}
-            size={shakeIntensity > 0.5 ? 10 : 6}
-            speed={shakeIntensity > 0.5 ? 2.5 : 0.6}
-            opacity={0.9}
+            size={4} // Smaller, softer particles
+            speed={0.4} // Slow falling speed
+            opacity={0.7}
             color="#ffffff"
             position={[0, SNOW_GLOBE_RADIUS/2, 0]}
         />

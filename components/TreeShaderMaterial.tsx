@@ -3,15 +3,15 @@ import * as THREE from 'three';
 
 // Custom Shader Material for the Tree Foliage
 // Handles:
-// 1. Wind (Vertex displacement based on time and height)
-// 2. Snow (Fragment mix based on normal Y direction)
+// 1. Snow (Fragment mix based on normal Y direction)
+// 2. Static geometry (Removed wind sway/shake)
 const TreeFoliageMaterial = shaderMaterial(
   {
     uTime: 0,
     uColor: new THREE.Color('#2d5a27'),
     uSnowColor: new THREE.Color('#ffffff'),
     uSnowAmount: 0.0, // 0 to 1
-    uWindStrength: 0.1, // Dynamic wind strength
+    uWindStrength: 0.0, 
   },
   // Vertex Shader
   `
@@ -26,17 +26,9 @@ const TreeFoliageMaterial = shaderMaterial(
       vNormal = normalize(normalMatrix * normal);
       vec3 pos = position;
 
-      // Wind effect: movement increases with height
-      // uWindStrength increases during shake/blizzard
-      float heightFactor = max(0.0, pos.y + 2.0); // Offset based on tree height
+      // Wind effect REMOVED for static tree
+      // No sway, no shake, just static position
       
-      // Combine slow base sway with rapid shake sway
-      float sway = sin(uTime * 1.5 + pos.y) * 0.1; 
-      float shake = sin(uTime * 20.0) * uWindStrength * 0.5; // High freq shake
-
-      pos.x += (sway + shake) * heightFactor;
-      pos.z += (cos(uTime * 1.2 + pos.y) * 0.1 + cos(uTime * 15.0) * uWindStrength * 0.5) * heightFactor;
-
       vPosition = pos;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
     }

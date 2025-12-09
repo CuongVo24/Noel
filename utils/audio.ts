@@ -121,14 +121,15 @@ class AudioManager {
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     
-    // Rising tone
-    osc.type = 'sawtooth';
+    // Rising tone - Smoother triangle wave
+    osc.type = 'triangle';
     osc.frequency.setValueAtTime(50, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(1000, this.ctx.currentTime + 1.5);
     
     gain.gain.setValueAtTime(0, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 0.1);
-    gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 1.3);
+    // Peak volume 0.3 as requested
+    gain.gain.linearRampToValueAtTime(0.3, this.ctx.currentTime + 0.1);
+    gain.gain.linearRampToValueAtTime(0.3, this.ctx.currentTime + 1.3);
     gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.5);
 
     // LFO for "humming" texture

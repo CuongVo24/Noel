@@ -22,7 +22,6 @@ interface TreeProps {
   decorations: Decoration[];
   isLit: boolean;
   onStarClick: (position: THREE.Vector3) => void;
-  shakeIntensity: number;
 }
 
 const TreeLayer = ({ position, scale, materialRef }: { position: [number, number, number], scale: number, materialRef: any }) => {
@@ -35,7 +34,7 @@ const TreeLayer = ({ position, scale, materialRef }: { position: [number, number
   );
 };
 
-export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart, decorations, isLit, onStarClick, shakeIntensity }) => {
+export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart, decorations, isLit, onStarClick }) => {
   const groupRef = useRef<THREE.Group>(null);
   const starRef = useRef<THREE.Mesh>(null);
   const matRef1 = useRef<any>(null);
@@ -46,29 +45,22 @@ export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart
 
   useFrame((state) => {
     const time = state.clock.getElapsedTime();
-    // Update uniforms with shake intensity
+    
+    // Update uniforms for snow amount only. Wind strength and time-based sway are disabled in shader.
     if (matRef1.current) { 
-        matRef1.current.uTime = time; 
         matRef1.current.uSnowAmount = snowAmount; 
-        matRef1.current.uWindStrength = 0.1 + shakeIntensity; // Base + Shake
     }
     if (matRef2.current) { 
-        matRef2.current.uTime = time; 
         matRef2.current.uSnowAmount = snowAmount;
-        matRef2.current.uWindStrength = 0.1 + shakeIntensity;
     }
     if (matRef3.current) { 
-        matRef3.current.uTime = time; 
         matRef3.current.uSnowAmount = snowAmount;
-        matRef3.current.uWindStrength = 0.1 + shakeIntensity;
     }
     
-    // Animate Star
-    if (starRef.current) {
-        starRef.current.rotation.y = time * 0.5 + shakeIntensity * Math.sin(time * 20); // Shake the star too
-        if (isLit) {
-            starRef.current.scale.setScalar(1 + Math.sin(time * 5) * 0.1);
-        }
+    // Star animation removed - static state
+    // We only update scale for light pulse if lit, but keep rotation static
+    if (starRef.current && isLit) {
+         starRef.current.scale.setScalar(1 + Math.sin(time * 2) * 0.05); // Very subtle pulse
     }
   });
 
