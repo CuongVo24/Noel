@@ -11,7 +11,7 @@ import { SimulatedUsers } from './components/SimulatedUsers';
 import { Overlay } from './components/Overlay';
 import { Gifts } from './components/Gifts';
 import { Campfire } from './components/Campfire';
-import { Snowman } from './components/Snowman';
+import { WillOTheWisp } from './components/WillOTheWisp'; // Replaced Snowman
 import { InventoryBar } from './components/InventoryBar';
 import { Fireworks } from './components/Fireworks';
 import { SantaAirdrop } from './components/SantaAirdrop';
@@ -283,8 +283,8 @@ const App: React.FC = () => {
       )}
 
       <Canvas shadows dpr={[1, 2]}>
-        {/* Camera Reset: Positioned outside looking at center */}
-        <PerspectiveCamera makeDefault position={[0, 5, 20]} fov={45} />
+        {/* Camera Reset: High, Wide angle for full view */}
+        <PerspectiveCamera makeDefault position={[0, 10, 25]} fov={45} />
         
         {/* Heatwave Shake Effect - Only active on G key press */}
         <CameraShake 
@@ -297,18 +297,22 @@ const App: React.FC = () => {
             intensity={heatWaveIntensity} 
         />
 
-        {/* OrbitControls: Unrestricted */}
+        {/* OrbitControls: Clean Hard Reset */}
         <OrbitControls 
-            enablePan={false} 
+            makeDefault
+            target={[0, 0, 0]}
+            enablePan={false}
             enableDamping={true}
             dampingFactor={0.05}
             minDistance={5}
-            maxDistance={30}
-            autoRotate={true}
-            autoRotateSpeed={0.5}
-            rotateSpeed={0.5}
-            target={[0, 0, 0]}
-            // Removed angle limits for full 360 freedom
+            maxDistance={50}
+            // Fully Unlock Angles for 360 sphere rotation
+            minAzimuthAngle={-Infinity}
+            maxAzimuthAngle={Infinity}
+            minPolarAngle={0}
+            maxPolarAngle={Math.PI}
+            // Disable auto rotate for manual control
+            autoRotate={false}
         />
 
         <SceneLighting isLit={treeLit} />
@@ -341,8 +345,10 @@ const App: React.FC = () => {
             <Campfire position={[-3, 0, 3]} flareTrigger={globalFlareTrigger} />
             <Campfire position={[0, 0, -5]} flareTrigger={globalFlareTrigger} />
 
-            <Snowman position={[-3, 0, -2]} rotation={[0, 0.5, 0]} />
-            <Snowman position={[2.5, 0, 4]} rotation={[0, -0.5, 0]} />
+            {/* Replaced Snowmen with Will-o'-the-Wisps */}
+            <WillOTheWisp position={[-3, 0, -2]} color="#00ffff" />
+            <WillOTheWisp position={[2.5, 0, 4]} color="#ffaa00" />
+            <WillOTheWisp position={[4.5, 0, -3]} color="#00ffaa" />
 
             <Gifts onOpen={setActiveGiftMsg} />
             

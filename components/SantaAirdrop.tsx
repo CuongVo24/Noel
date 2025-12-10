@@ -44,29 +44,26 @@ export const SantaAirdrop: React.FC<SantaAirdropProps> = ({ isActive, onComplete
     } else if (phase === 'DROP') {
         // Box falls from sky
         if (boxRef.current) {
-            // Start at Y=20, land at Y=0.5
+            // Start at Y=20, land at Y=1.0 (since box is 2 units high, center is at 1)
             const progress = Math.min(1, timer * 1.5); // Fall speed
             const eased = progress * progress; // Quadratic ease in
-            boxRef.current.position.y = 20 - eased * 19.5;
+            boxRef.current.position.y = 20 - eased * 19.0;
             
             // Spin while falling
             boxRef.current.rotation.x += delta * 5;
             boxRef.current.rotation.z += delta * 3;
 
-            if (boxRef.current.position.y <= 0.5) {
+            if (boxRef.current.position.y <= 1.0) {
                 audioManager.playThud();
                 setPhase('IMPACT');
                 setTimer(0);
                 // Reset rotation to flat
                 boxRef.current.rotation.set(0, 0, 0);
-                boxRef.current.position.y = 0.5;
+                boxRef.current.position.y = 1.0;
             }
         }
     } else if (phase === 'IMPACT') {
-        // Wobble after impact
-        if (boxRef.current) {
-            boxRef.current.scale.setScalar(1 + Math.sin(timer * 20) * 0.1 * (1 - timer));
-        }
+        // STATIC: No wobble code here anymore.
         
         // Explode after 1 second
         if (timer > 1.0) {
@@ -95,6 +92,18 @@ export const SantaAirdrop: React.FC<SantaAirdropProps> = ({ isActive, onComplete
                 <mesh position={[0, 0, 0]}>
                      <boxGeometry args={[0.3, 2.05, 2.05]} />
                      <meshStandardMaterial color="#ffd700" metalness={0.8} />
+                </mesh>
+
+                {/* SNOW CAP ADDITION */}
+                <mesh position={[0, 1.1, 0]}>
+                     {/* Flattened sphere acting as snow mound */}
+                     <sphereGeometry args={[1.2, 32, 16]} />
+                     <meshStandardMaterial 
+                        color="#ffffff" 
+                        roughness={0.8} 
+                        metalness={0.1}
+                     />
+                     <group scale={[1, 0.3, 1]} />
                 </mesh>
             </group>
         )}
