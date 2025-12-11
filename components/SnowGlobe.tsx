@@ -108,6 +108,7 @@ export const SnowGlobe: React.FC<{ isNight: boolean; shakeIntensity: number }> =
             opacity={0.7}
             color="#ffffff"
             position={[0, SNOW_GLOBE_RADIUS/2, 0]}
+            frustumCulled={false}
         />
       </group>
     </group>

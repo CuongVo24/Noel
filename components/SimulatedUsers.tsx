@@ -30,8 +30,10 @@ export const SimulatedUsers: React.FC = () => {
         }
         u.pos.lerp(u.target, u.speed);
         u.pos.y += Math.sin(time * 2 + i) * 0.005;
+        
         const child = groupRef.current?.children[i];
         if (child) {
+            // Safe update of position
             child.position.copy(u.pos);
         }
     });
@@ -40,7 +42,7 @@ export const SimulatedUsers: React.FC = () => {
   return (
     <group ref={groupRef}>
       {users.map((user) => (
-        <group key={user.id} position={user.pos}>
+        <group key={user.id} position={[user.pos.x, user.pos.y, user.pos.z]}>
             <mesh>
                 <sphereGeometry args={[0.1, 16, 16]} />
                 <meshBasicMaterial color={user.color} toneMapped={false} transparent opacity={0.8} />

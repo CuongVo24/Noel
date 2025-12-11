@@ -37,7 +37,7 @@ const FlareLight = ({ active, startTime, offset }: { active: boolean, startTime:
             color="#ffaa00"
             distance={8}
             decay={2}
-            castShadow
+            // Removed castShadow to save texture units
         />
     );
 };
@@ -51,8 +51,8 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
   // Track start time for lights
   const [flareStartTime, setFlareStartTime] = useState(0);
 
-  // Enhanced Particle System Data
-  const particleCount = 150; 
+  // REDUCED PARTICLE COUNT (60-70% reduction from 200)
+  const particleCount = 70; 
   const [initialData] = useState(() => {
       const pos = new Float32Array(particleCount * 3);
       const vel = new Float32Array(particleCount * 3); 
@@ -60,12 +60,15 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
       const lifetimes = new Float32Array(particleCount); 
       const ages = new Float32Array(particleCount); 
       
+      // Initialize off-screen
+      for(let i=0; i<particleCount*3; i++) pos[i] = -1000;
+
       return { pos, vel, colors, lifetimes, ages };
   });
 
   const triggerFlare = useCallback(() => {
       setFlaring(true);
-      setFlareStartTime(Date.now()); // Using Date.now for simpler state toggle, handled in hook via clock
+      setFlareStartTime(Date.now()); 
       audioManager.playFireWhoosh();
 
       if (particlesRef.current) {
@@ -73,17 +76,21 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
           
           for (let i = 0; i < particleCount; i++) {
               initialData.ages[i] = 0;
-              initialData.lifetimes[i] = 2.0 + Math.random() * 1.0;
+              initialData.lifetimes[i] = 1.5 + Math.random() * 1.0;
 
               // Tighter emitter at base
-              positions[i * 3] = (Math.random() - 0.5) * 0.2;
-              positions[i * 3 + 1] = 0.1 + Math.random() * 0.1;
-              positions[i * 3 + 2] = (Math.random() - 0.5) * 0.2;
+              positions[i * 3] = (Math.random() - 0.5) * 0.3;
+              positions[i * 3 + 1] = 0.1 + Math.random() * 0.2;
+              positions[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
               
-              // Higher Velocity
-              initialData.vel[i * 3] = (Math.random() - 0.5) * 0.2; 
-              initialData.vel[i * 3 + 1] = 0.5 + Math.random() * 0.5; // Fast upward burst
-              initialData.vel[i * 3 + 2] = (Math.random() - 0.5) * 0.2;
+              // TUNED PHYSICS: LOWER & WIDER
+              // Spread (Horizontal): Increased for wider fan-out effect
+              initialData.vel[i * 3] = (Math.random() - 0.5) * 3.0; 
+              initialData.vel[i * 3 + 2] = (Math.random() - 0.5) * 3.0;
+              
+              // Height (Vertical): Reduced to reach ~halfway up the tree
+              // Gravity is strong (3.0), so 5.0 - 7.0 vel is enough for a mid-height burst
+              initialData.vel[i * 3 + 1] = 5.0 + Math.random() * 2.0; 
           }
       }
   }, [initialData, particleCount]);
@@ -119,8 +126,9 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
             const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
             const currentColors = particlesRef.current.geometry.attributes.color.array as Float32Array;
             
-            const gravity = 0.1; 
-            const drag = 0.96;
+            // SNAPPY PHYSICS
+            const gravity = 3.0; // Strong gravity for realistic rise and fall
+            const drag = 0.96; // Air resistance to curb infinite ascent
             const windX = 0.2;
 
             for (let i = 0; i < particleCount; i++) {
@@ -137,29 +145,28 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
                     initialData.vel[i * 3 + 1] *= drag;
                     initialData.vel[i * 3 + 2] *= drag;
 
-                    positions[i * 3] += initialData.vel[i * 3] * delta * 60; 
-                    positions[i * 3 + 1] += initialData.vel[i * 3 + 1] * delta * 60;
-                    positions[i * 3 + 2] += initialData.vel[i * 3 + 2] * delta * 60;
+                    positions[i * 3] += initialData.vel[i * 3] * delta; 
+                    positions[i * 3 + 1] += initialData.vel[i * 3 + 1] * delta;
+                    positions[i * 3 + 2] += initialData.vel[i * 3 + 2] * delta;
 
-                    // Super Bright Colors (HDR)
-                    // We multiply RGB by high values > 1.0 to work with Bloom
+                    // HDR Colors for Bloom
                     let r, g, b;
                     
                     if (lifeRatio < 0.2) {
-                        // White Hot Core
+                        // WHITE HOT CENTER
+                        r = 20.0;
+                        g = 15.0;
+                        b = 10.0;
+                    } else if (lifeRatio < 0.6) {
+                        // GOLDEN FIRE
                         r = 10.0;
-                        g = 8.0;
-                        b = 5.0;
-                    } else if (lifeRatio < 0.5) {
-                        // Fire Orange
-                        r = 5.0;
-                        g = 2.0;
-                        b = 0.1;
+                        g = 4.0;
+                        b = 0.5;
                     } else {
-                        // Fade out
-                        const fade = 1.0 - ((lifeRatio - 0.5) * 2); 
-                        r = 2.0 * fade;
-                        g = 0.5 * fade;
+                        // DEEP RED FADE
+                        const fade = 1.0 - ((lifeRatio - 0.6) * 2.5); 
+                        r = 5.0 * fade;
+                        g = 0.2 * fade;
                         b = 0.0;
                     }
                     
@@ -172,10 +179,11 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
                         initialData.ages[i] = initialData.lifetimes[i];
                     }
                 } else {
+                    // Hide inactive particles
                     currentColors[i * 3] = 0;
                     currentColors[i * 3 + 1] = 0;
                     currentColors[i * 3 + 2] = 0;
-                    positions[i * 3 + 1] = -1;
+                    positions[i * 3 + 1] = -1000;
                 }
             }
             particlesRef.current.geometry.attributes.position.needsUpdate = true;
@@ -188,8 +196,10 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
     } else {
         if (particlesRef.current) {
              const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
-             for(let i=0; i<particleCount; i++) positions[i*3+1] = -1;
-             particlesRef.current.geometry.attributes.position.needsUpdate = true;
+             if(positions[1] > -500) {
+                 for(let i=0; i<particleCount; i++) positions[i*3+1] = -1000;
+                 particlesRef.current.geometry.attributes.position.needsUpdate = true;
+             }
         }
     }
   });
@@ -239,7 +249,7 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
       </group>
 
       {/* Flare Particles */}
-      <points ref={particlesRef}>
+      <points ref={particlesRef} frustumCulled={false} renderOrder={1}>
          <bufferGeometry>
             <bufferAttribute 
                 attach="attributes-position"
@@ -260,12 +270,12 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
             transparent
             blending={THREE.AdditiveBlending}
             depthWrite={false}
-            toneMapped={false} // CRITICAL for bloom
+            toneMapped={false}
          />
       </points>
 
-      {/* Static Warm Light for base fire */}
-      <pointLight color="#ff6f00" intensity={1.5} distance={6} decay={2} castShadow />
+      {/* Static Warm Light for base fire - Removed castShadow */}
+      <pointLight color="#ff6f00" intensity={1.5} distance={6} decay={2} />
     </group>
   );
 };

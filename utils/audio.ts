@@ -148,6 +148,23 @@ class AudioManager {
     osc.stop(this.ctx.currentTime + 1.5);
   }
 
+  playPowerDown() {
+    if (!this.ctx || this.isMuted) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1000, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 1.0);
+    
+    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.0);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain!);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 1.0);
+  }
+
   playSleighBells() {
     if (!this.ctx || this.isMuted) return;
     

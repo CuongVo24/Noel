@@ -26,7 +26,7 @@ const SceneLighting = ({ isLit }: { isLit: boolean }) => {
             <ambientLight intensity={isLit ? 0.3 : 0.02} color="#ccddff" />
             <directionalLight 
                 position={[10, 20, 10]} 
-                intensity={isLit ? 0.8 : 0.1} 
+                intensity={isLit ? 0.8 : 0.05} 
                 castShadow 
                 shadow-mapSize={[1024, 1024]}
                 color="#aaddff"
@@ -60,6 +60,9 @@ const App: React.FC = () => {
 
   // Fireworks State
   const [fireworksPos, setFireworksPos] = useState<THREE.Vector3 | null>(null);
+
+  // Super Nova Flash State
+  const [superNovaTrigger, setSuperNovaTrigger] = useState(0);
 
   // Gift State
   const [activeGiftMsg, setActiveGiftMsg] = useState<string | null>(null);
@@ -116,9 +119,10 @@ const App: React.FC = () => {
             lastKeyTime.current = now;
             setAirdropActive(true);
         } else if (e.key.toLowerCase() === 'j') {
-            // FIREWORKS TRIGGER
+            // FIREWORKS & SUPER NOVA TRIGGER
             lastKeyTime.current = now;
             setFireworksPos(new THREE.Vector3(0, 4.8, 0));
+            setSuperNovaTrigger(now);
             audioManager.playFirework();
         }
     };
@@ -153,8 +157,8 @@ const App: React.FC = () => {
     setPendingPosition(null);
   };
 
-  const handlePowerOn = () => {
-      setTreeLit(true);
+  const handlePowerToggle = () => {
+      setTreeLit(prev => !prev);
       setCeremony({ ...ceremony, active: false });
   };
 
@@ -228,7 +232,7 @@ const App: React.FC = () => {
         gameState={gameState} 
         onStart={handleStart}
         ceremony={ceremony}
-        onPowerClick={handlePowerOn}
+        onPowerClick={handlePowerToggle}
         activeGiftMessage={activeGiftMsg}
         onCloseGift={() => setActiveGiftMsg(null)}
         isLightsOn={treeLit}
@@ -309,8 +313,9 @@ const App: React.FC = () => {
             // Fully Unlock Angles for 360 sphere rotation
             minAzimuthAngle={-Infinity}
             maxAzimuthAngle={Infinity}
+            // Limit polar angle to 90 degrees (Math.PI / 2) to prevent going below ground
             minPolarAngle={0}
-            maxPolarAngle={Math.PI}
+            maxPolarAngle={Math.PI / 2 - 0.05}
             // Disable auto rotate for manual control
             autoRotate={false}
         />
@@ -326,6 +331,7 @@ const App: React.FC = () => {
                 decorations={decorations}
                 isLit={treeLit}
                 onStarClick={handleStarClick}
+                superNovaTrigger={superNovaTrigger}
             />
 
             <SantaAirdrop 
@@ -345,10 +351,15 @@ const App: React.FC = () => {
             <Campfire position={[-3, 0, 3]} flareTrigger={globalFlareTrigger} />
             <Campfire position={[0, 0, -5]} flareTrigger={globalFlareTrigger} />
 
-            {/* Replaced Snowmen with Will-o'-the-Wisps */}
+            {/* Replaced Snowmen with Will-o'-the-Wisps - INCREASED COUNT */}
             <WillOTheWisp position={[-3, 0, -2]} color="#00ffff" />
             <WillOTheWisp position={[2.5, 0, 4]} color="#ffaa00" />
             <WillOTheWisp position={[4.5, 0, -3]} color="#00ffaa" />
+            <WillOTheWisp position={[-2, 1, 3]} color="#b388ff" />
+            <WillOTheWisp position={[3, 1, -4]} color="#ff00ff" />
+            <WillOTheWisp position={[0, 2, -5]} color="#00ff00" />
+            <WillOTheWisp position={[-4, 1.5, 0]} color="#00ffff" />
+            <WillOTheWisp position={[1, 0.5, 4]} color="#ffaa00" />
 
             <Gifts onOpen={setActiveGiftMsg} />
             
@@ -357,9 +368,9 @@ const App: React.FC = () => {
 
         <EffectComposer enableNormalPass={false}>
             <Bloom 
-                luminanceThreshold={treeLit ? 1 : 0.5} 
+                luminanceThreshold={treeLit ? 1.0 : 4.0} // Very high threshold when off to strictly disable bloom
                 mipmapBlur 
-                intensity={1.5} 
+                intensity={treeLit ? 1.5 : 0} // Zero intensity when off
                 radius={0.4}
             />
             <Vignette eskil={false} offset={0.1} darkness={1.1} />

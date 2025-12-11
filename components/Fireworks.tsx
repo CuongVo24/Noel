@@ -8,24 +8,29 @@ interface FireworksProps {
 }
 
 export const Fireworks: React.FC<FireworksProps> = ({ position, onComplete }) => {
-  // Create particle data
-  const count = 150;
+  // Create particle data - Increased Count to 300
+  const count = 300;
   const [positions, colors, velocities] = useMemo(() => {
     const pos = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
     const vel = [];
     
+    // HDR Colors (Values > 1.0 for Bloom) - Expanded Palette
     const colorPalette = [
-      new THREE.Color('#ff0000'),
-      new THREE.Color('#ffd700'),
-      new THREE.Color('#00ff00'),
-      new THREE.Color('#00ffff'),
+      [20, 0, 0],   // Bright Red
+      [20, 16, 0],  // Bright Gold
+      [0, 20, 0],   // Bright Green
+      [0, 20, 20],  // Bright Cyan
+      [0, 0, 20],   // Bright Blue
+      [20, 0, 20],  // Bright Magenta
+      [20, 10, 0],  // Bright Orange
     ];
 
     for (let i = 0; i < count; i++) {
       // Start at origin (relative to group)
       pos[i * 3] = 0;
-      pos[i * 3 + 1] = 0;
+      // OFFSET EMISSION: Start slightly below the star (The Tail)
+      pos[i * 3 + 1] = -0.6; 
       pos[i * 3 + 2] = 0;
 
       // Random velocity outward
@@ -41,9 +46,9 @@ export const Fireworks: React.FC<FireworksProps> = ({ position, onComplete }) =>
 
       // Color
       const c = colorPalette[Math.floor(Math.random() * colorPalette.length)];
-      col[i * 3] = c.r;
-      col[i * 3 + 1] = c.g;
-      col[i * 3 + 2] = c.b;
+      col[i * 3] = c[0];
+      col[i * 3 + 1] = c[1];
+      col[i * 3 + 2] = c[2];
     }
     return [pos, col, vel];
   }, []);
@@ -86,7 +91,7 @@ export const Fireworks: React.FC<FireworksProps> = ({ position, onComplete }) =>
 
   return (
     <group position={position}>
-      <points ref={pointsRef}>
+      <points ref={pointsRef} frustumCulled={false} renderOrder={999}>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
@@ -107,9 +112,10 @@ export const Fireworks: React.FC<FireworksProps> = ({ position, onComplete }) =>
           transparent
           depthWrite={false}
           blending={THREE.AdditiveBlending}
+          toneMapped={false} // Enable bloom
         />
       </points>
-      <pointLight color="#ffd700" intensity={2} distance={5} decay={2} />
+      <pointLight color="#ffd700" intensity={3} distance={5} decay={2} />
     </group>
   );
 };

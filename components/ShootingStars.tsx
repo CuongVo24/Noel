@@ -43,7 +43,7 @@ const Star = () => {
   });
 
   return (
-    <mesh ref={mesh} visible={false}>
+    <mesh ref={mesh} visible={false} frustumCulled={false}>
         <cylinderGeometry args={[0.02, 0, 0.8]} />
         <meshBasicMaterial color="#ffffff" transparent opacity={0.8} />
     </mesh>

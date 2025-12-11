@@ -52,7 +52,7 @@ export const WillOTheWisp: React.FC<WispProps> = ({ position, color }) => {
   return (
     <group ref={groupRef} position={position}>
         {/* Core Glow */}
-        <mesh castShadow={false}>
+        <mesh castShadow={false} frustumCulled={false}>
             <sphereGeometry args={[0.2, 16, 16]} />
             <meshStandardMaterial 
                 color={wispColor}
@@ -65,7 +65,7 @@ export const WillOTheWisp: React.FC<WispProps> = ({ position, color }) => {
         </mesh>
         
         {/* Outer Halo */}
-        <mesh scale={1.5}>
+        <mesh scale={1.5} frustumCulled={false}>
             <sphereGeometry args={[0.2, 16, 16]} />
             <meshBasicMaterial 
                 color={wispColor}
@@ -113,7 +113,7 @@ const WispParticle = ({ parentColor }: { parentColor: string }) => {
     });
 
     return (
-        <mesh ref={ref}>
+        <mesh ref={ref} frustumCulled={false}>
             <sphereGeometry args={[0.03]} />
             <meshBasicMaterial color={parentColor} transparent opacity={0.6} />
         </mesh>

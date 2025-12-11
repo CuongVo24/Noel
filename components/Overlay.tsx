@@ -40,16 +40,23 @@ export const Overlay: React.FC<OverlayProps> = ({
   };
 
   const handlePowerInteraction = () => {
-      if (isLightsOn || isCharging) return;
+      if (isCharging) return;
       
-      setIsCharging(true);
-      audioManager.playPowerUp();
+      if (isLightsOn) {
+          // If lights are ON, turn them OFF immediately
+          audioManager.playPowerDown();
+          onPowerClick(); // Toggles state in App
+      } else {
+          // If lights are OFF, play the Power Up sequence
+          setIsCharging(true);
+          audioManager.playPowerUp();
 
-      // Trigger Lights On after 1.5s
-      setTimeout(() => {
-          onPowerClick(); // This sets lightsOn in App
-          setIsCharging(false);
-      }, 1500);
+          // Trigger Lights On after 1.5s
+          setTimeout(() => {
+              onPowerClick(); // Toggles state in App
+              setIsCharging(false);
+          }, 1500);
+      }
   };
 
   // LOBBY SCREEN
@@ -95,6 +102,19 @@ export const Overlay: React.FC<OverlayProps> = ({
     );
   }
 
+  // Determine button styles based on state
+  const buttonBorder = isCharging 
+     ? 'border-yellow-300' 
+     : isLightsOn 
+        ? 'border-yellow-400 shadow-[0_0_20px_rgba(255,215,0,0.6)]' 
+        : 'border-gray-500 hover:border-yellow-200';
+
+  const buttonBg = isCharging 
+     ? 'bg-yellow-900' 
+     : isLightsOn 
+        ? 'bg-yellow-900/80' 
+        : 'bg-gray-900';
+
   // MAIN HUD
   return (
     <div className="absolute inset-0 z-40 pointer-events-none">
@@ -116,36 +136,34 @@ export const Overlay: React.FC<OverlayProps> = ({
          </div>
       </div>
 
-      {/* Power / Light Switch Button (Bottom Left) */}
-      {!isLightsOn && (
-          <div className="absolute bottom-8 left-8 pointer-events-auto">
-              <motion.button
-                onClick={handlePowerInteraction}
-                disabled={isCharging}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                className={`w-20 h-20 rounded-full border-4 flex items-center justify-center shadow-[0_0_30px_rgba(255,255,0,0.2)] transition-colors relative overflow-hidden ${isCharging ? 'border-yellow-300 bg-yellow-900' : 'border-gray-500 bg-gray-900 hover:border-yellow-200'}`}
-              >
-                  {/* Charging Fill Animation */}
-                  {isCharging && (
-                      <motion.div 
-                        initial={{ height: '0%' }}
-                        animate={{ height: '100%' }}
-                        transition={{ duration: 1.5, ease: "linear" }}
-                        className="absolute bottom-0 left-0 w-full bg-yellow-500 z-0"
-                      />
-                  )}
-                  
-                  {/* Icon */}
-                  <span className="relative z-10 text-3xl filter drop-shadow-lg">
-                      {isCharging ? '⚡' : '💡'}
-                  </span>
-              </motion.button>
-              <div className="text-center mt-2 text-yellow-500/80 font-[Cinzel] text-sm uppercase tracking-wider">
-                  {isCharging ? 'Charging...' : 'Power Up'}
-              </div>
+      {/* Power / Light Switch Button (Bottom Left) - ALWAYS VISIBLE */}
+      <div className="absolute bottom-8 left-8 pointer-events-auto">
+          <motion.button
+            onClick={handlePowerInteraction}
+            disabled={isCharging}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all relative overflow-hidden ${buttonBorder} ${buttonBg}`}
+          >
+              {/* Charging Fill Animation */}
+              {isCharging && (
+                  <motion.div 
+                    initial={{ height: '0%' }}
+                    animate={{ height: '100%' }}
+                    transition={{ duration: 1.5, ease: "linear" }}
+                    className="absolute bottom-0 left-0 w-full bg-yellow-500 z-0"
+                  />
+              )}
+              
+              {/* Icon */}
+              <span className={`relative z-10 text-3xl filter drop-shadow-lg ${isLightsOn ? 'text-yellow-100' : 'text-gray-400'}`}>
+                  {isCharging ? '⚡' : isLightsOn ? '💡' : '🔌'}
+              </span>
+          </motion.button>
+          <div className="text-center mt-2 text-yellow-500/80 font-[Cinzel] text-sm uppercase tracking-wider">
+              {isCharging ? 'Charging...' : isLightsOn ? 'Power Off' : 'Power Up'}
           </div>
-      )}
+      </div>
 
       {/* Gift Reading Overlay */}
       <AnimatePresence>
