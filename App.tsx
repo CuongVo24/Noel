@@ -106,6 +106,10 @@ const App: React.FC = () => {
   // Keyboard Controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+        // IGNORE if user is typing in an input or textarea
+        const tag = (document.activeElement?.tagName || '').toUpperCase();
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
         if (gameState === 'LOBBY') return;
         const now = Date.now();
         // 200ms Debounce
@@ -287,8 +291,8 @@ const App: React.FC = () => {
       )}
 
       <Canvas shadows dpr={[1, 2]}>
-        {/* Camera Reset: High, Wide angle for full view */}
-        <PerspectiveCamera makeDefault position={[0, 10, 25]} fov={45} />
+        {/* Camera Reset: High, Wide angle for full view, Low Near Clip for Particles */}
+        <PerspectiveCamera makeDefault position={[0, 10, 25]} fov={45} near={0.01} />
         
         {/* Heatwave Shake Effect - Only active on G key press */}
         <CameraShake 

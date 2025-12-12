@@ -91,7 +91,7 @@ export const WillOTheWisp: React.FC<WispProps> = ({ position, color }) => {
   );
 };
 
-const WispParticle = ({ parentColor }: { parentColor: string }) => {
+const WispParticle: React.FC<{ parentColor: string }> = ({ parentColor }) => {
     const ref = useRef<THREE.Mesh>(null);
     const [state] = useState(() => ({
         speed: 0.02 + Math.random() * 0.02,

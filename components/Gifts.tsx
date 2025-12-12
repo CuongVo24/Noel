@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useSpring, animated } from '@react-spring/three';
+import { RoundedBox } from '@react-three/drei';
+import * as THREE from 'three';
 import { Gift } from '../types';
 
-// Static mock gifts defined outside component to ensure they don't regenerate on re-render
+// Static mock gifts
 const STATIC_GIFTS: Gift[] = [
     { id: 'g1', position: [1.5, 0, 1.5], color: '#d32f2f', message: 'Giáng sinh an lành! Merry Christmas!', sender: 'Mom', opened: false },
     { id: 'g2', position: [-1.2, 0, 1], color: '#1976d2', message: 'Chúc bạn một mùa đông ấm áp bên gia đình.', sender: 'Dev', opened: false },
@@ -21,16 +23,37 @@ interface GiftBoxProps {
   onOpen: (msg: string) => void;
 }
 
-const GiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
+const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   const [active, setActive] = useState(false);
   
-  // Memoize random rotation so it doesn't change on parent re-renders
+  // --- DIMENSIONS & CONSTANTS ---
+  const SIZE = 0.5;
+  const WALL_THICKNESS = 0.02; 
+  const HALF_SIZE = SIZE / 2;
+  
+  // LID CONFIGURATION
+  // The Lid is a solid plate that sits ON TOP of the walls.
+  // Walls end at y = SIZE = 0.5 (relative to ground) if box is placed at y=0.
+  // Pivot is at y = SIZE.
+  const LID_THICKNESS = 0.04;
+  const SNOW_HEIGHT = 0.06;
+  const SNOW_SIZE = SIZE * 0.9; // INSET: 90% of lid size to prevent z-fighting
+
+  // Vertical Stacking Relative to Pivot (y=0 in Lid Group)
+  // 1. Lid Mesh Bottom = 0. Lid Mesh Center Y = LID_THICKNESS / 2.
+  const LID_MESH_Y = LID_THICKNESS / 2;
+  
+  // 2. Snow Mesh Bottom = LID_THICKNESS. Snow Mesh Center Y = LID_THICKNESS + SNOW_HEIGHT / 2.
+  // We add a tiny epsilon (0.001) to ensure no z-fighting with lid top
+  const SNOW_MESH_Y = LID_THICKNESS + (SNOW_HEIGHT / 2) + 0.001;
+
+  // Memoize random rotation
   const [rotation] = useState(() => [0, Math.random() * Math.PI, 0] as [number, number, number]);
 
-  const { scale, lidRotation } = useSpring({
-    scale: active ? 1.1 : 1,
-    lidRotation: active ? -Math.PI / 1.5 : 0,
-    config: { tension: 200, friction: 10 }
+  // Spring animation for Lid Opening
+  const { lidRotation } = useSpring({
+    lidRotation: active ? -Math.PI / 1.5 : 0, 
+    config: { tension: 180, friction: 12 }
   });
 
   const handleClick = (e: any) => {
@@ -41,58 +64,99 @@ const GiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
     }
   };
 
+  const wallMaterial = new THREE.MeshStandardMaterial({
+      color: gift.color,
+      roughness: 0.8,
+      side: THREE.DoubleSide, // Needed for walls to be visible inside and out
+  });
+
   return (
-    // @ts-ignore
-    <animated.group position={gift.position} scale={scale} onClick={handleClick} rotation={rotation}>
-      {/* Box Body */}
-      <mesh position={[0, 0.25, 0]} castShadow>
-        <boxGeometry args={[0.5, 0.5, 0.5]} />
-        <meshStandardMaterial color={gift.color} roughness={0.5} />
-      </mesh>
+    <group position={gift.position} rotation={rotation} onClick={handleClick}>
       
-      {/* Ribbon Vertical */}
-      <mesh position={[0, 0.25, 0]}>
-         <boxGeometry args={[0.51, 0.51, 0.1]} />
-         <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      {/* Ribbon Horizontal */}
-      <mesh position={[0, 0.25, 0]}>
-         <boxGeometry args={[0.1, 0.51, 0.51]} />
-         <meshStandardMaterial color="#ffffff" />
-      </mesh>
+      {/* --- HOLLOW BODY (5 Separate Walls) --- */}
+      {/* Walls are shifted up by HALF_SIZE so bottom aligns with ground (y=0) if group is at y=0 */}
+      <group position={[0, HALF_SIZE, 0]}>
+          {/* Bottom Floor */}
+          <mesh position={[0, -HALF_SIZE + (WALL_THICKNESS/2), 0]} castShadow receiveShadow material={wallMaterial}>
+              <boxGeometry args={[SIZE, WALL_THICKNESS, SIZE]} />
+          </mesh>
+          
+          {/* Left Wall */}
+          <mesh position={[-HALF_SIZE + (WALL_THICKNESS/2), 0, 0]} castShadow receiveShadow material={wallMaterial}>
+              <boxGeometry args={[WALL_THICKNESS, SIZE, SIZE]} />
+          </mesh>
 
-      {/* SNOW BLANKET - Flattened Pyramid Trick */}
-      {/* Rotated 45 degrees to align radial segments with box corners */}
-      <mesh position={[0, 0.525, 0]} rotation={[0, Math.PI / 4, 0]}>
-          {/* TopRadius 0.3, BottomRadius 0.4 (approx matching 0.5 box), Height 0.1, 4 Segments */}
-          <cylinderGeometry args={[0.3, 0.4, 0.1, 4]} />
-          <meshStandardMaterial color="#ffffff" roughness={1.0} metalness={0.0} />
-      </mesh>
+          {/* Right Wall */}
+          <mesh position={[HALF_SIZE - (WALL_THICKNESS/2), 0, 0]} castShadow receiveShadow material={wallMaterial}>
+              <boxGeometry args={[WALL_THICKNESS, SIZE, SIZE]} />
+          </mesh>
 
-      {/* Lid Group */}
+          {/* Front Wall */}
+          <mesh position={[0, 0, HALF_SIZE - (WALL_THICKNESS/2)]} castShadow receiveShadow material={wallMaterial}>
+              <boxGeometry args={[SIZE - (WALL_THICKNESS*2), SIZE, WALL_THICKNESS]} />
+          </mesh>
+
+          {/* Back Wall */}
+          <mesh position={[0, 0, -HALF_SIZE + (WALL_THICKNESS/2)]} castShadow receiveShadow material={wallMaterial}>
+              <boxGeometry args={[SIZE - (WALL_THICKNESS*2), SIZE, WALL_THICKNESS]} />
+          </mesh>
+
+          {/* External Ribbons (Decals) */}
+          <mesh position={[0, 0, HALF_SIZE + 0.001]}>
+              <planeGeometry args={[0.08, SIZE]} />
+              <meshStandardMaterial color="#ffffff" side={THREE.DoubleSide} transparent opacity={0.9} />
+          </mesh>
+          <mesh position={[0, 0, -HALF_SIZE - 0.001]} rotation={[0, Math.PI, 0]}>
+              <planeGeometry args={[0.08, SIZE]} />
+              <meshStandardMaterial color="#ffffff" side={THREE.DoubleSide} transparent opacity={0.9} />
+          </mesh>
+      </group>
+
+      {/* --- HINGED LID --- */}
+      {/* Pivot Point: Top Back Edge of the box. y=SIZE (0.5), z=-HALF_SIZE (-0.25) */}
       {/* @ts-ignore */}
-      <animated.group position={[0, 0.5, -0.25]} rotation-x={lidRotation} rotation-y={0} rotation-z={0}>
-         {/* Lid Pivot offset logic: pivot is at back edge */}
-         <group position={[0, 0, 0.25]}> 
-            <mesh position={[0, 0.05, 0]}>
-                <boxGeometry args={[0.55, 0.1, 0.55]} />
-                <meshStandardMaterial color={gift.color} roughness={0.5} />
+      <animated.group position={[0, SIZE, -HALF_SIZE]} rotation-x={lidRotation}>
+          
+          {/* Offset the content so the pivot acts on the back edge */}
+          <group position={[0, 0, HALF_SIZE]}>
+            
+            {/* 1. Main Lid Plate */}
+            <mesh position={[0, LID_MESH_Y, 0]} castShadow receiveShadow material={wallMaterial}>
+                <boxGeometry args={[SIZE, LID_THICKNESS, SIZE]} />
             </mesh>
-            {/* Bow */}
-            <mesh position={[0, 0.15, 0]}>
-                <sphereGeometry args={[0.1, 8, 8]} />
-                <meshStandardMaterial color="#ffffff" />
+
+            {/* 2. Snow Cap - Inset to fix side artifacts */}
+            <RoundedBox 
+                args={[SNOW_SIZE, SNOW_HEIGHT, SNOW_SIZE]} 
+                radius={0.02} 
+                smoothness={4}
+                position={[0, SNOW_MESH_Y, 0]}
+            >
+                <meshStandardMaterial color="#ffffff" roughness={1.0} side={THREE.FrontSide} />
+            </RoundedBox>
+
+            {/* Bow on top of snow */}
+            <mesh position={[0, SNOW_MESH_Y + (SNOW_HEIGHT/2) + 0.04, 0]}>
+                <sphereGeometry args={[0.08]} />
+                <meshStandardMaterial color="#ffffff" roughness={0.9} />
             </mesh>
-         </group>
+
+          </group>
       </animated.group>
-    </animated.group>
+
+      {/* Fake Ground Shadow */}
+      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI/2, 0, 0]}>
+         <planeGeometry args={[SIZE * 1.2, SIZE * 1.2]} />
+         <meshBasicMaterial color="#000000" opacity={0.3} transparent />
+      </mesh>
+    </group>
   );
 };
 
 export const Gifts: React.FC<{ onOpen: (msg: string) => void }> = ({ onOpen }) => {
     return (
         <group>
-            {STATIC_GIFTS.map(g => <GiftBox key={g.id} gift={g} onOpen={onOpen} />)}
+            {STATIC_GIFTS.map(g => <HollowGiftBox key={g.id} gift={g} onOpen={onOpen} />)}
         </group>
     );
 };
