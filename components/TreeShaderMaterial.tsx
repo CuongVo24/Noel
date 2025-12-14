@@ -61,7 +61,7 @@ float snoise(vec3 v) {
 export const TreeSnowMaterial: React.FC<TreeSnowMaterialProps> = ({ color, snowAmount }) => {
   const materialRef = useRef<THREE.MeshStandardMaterial>(null);
 
-  const onBeforeCompile = (shader: THREE.Shader) => {
+  const onBeforeCompile = (shader: any) => {
     // 1. Add Uniforms
     shader.uniforms.uSnowAmount = { value: 0 };
     shader.uniforms.uSnowColor = { value: new THREE.Color('#ffffff') };

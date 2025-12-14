@@ -1,7 +1,8 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { audioManager } from '../utils/audio';
+import { useQuality } from '../hooks/useQuality';
 
 interface CampfireProps {
   position: [number, number, number];
@@ -18,9 +19,7 @@ const FlareLight = ({ active, startTime, offset }: { active: boolean, startTime:
         const age = now - startTime;
         
         if (age < 2.0) {
-            // Move up
-            lightRef.current.position.y = 0.5 + (age * 1.5); // Rise speed
-            // Intensity Curve: Burst then fade
+            lightRef.current.position.y = 0.5 + (age * 1.5); 
             const intensity = Math.max(0, 5 * (1 - (age / 2))); 
             lightRef.current.intensity = intensity;
         } else {
@@ -37,23 +36,25 @@ const FlareLight = ({ active, startTime, offset }: { active: boolean, startTime:
             color="#ffaa00"
             distance={8}
             decay={2}
-            // Removed castShadow to save texture units
         />
     );
 };
 
 export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }) => {
+  const quality = useQuality();
   const fireGroupRef = useRef<THREE.Group>(null);
   const particlesRef = useRef<THREE.Points>(null);
   const lastTriggerRef = useRef(0);
   
   const [flaring, setFlaring] = useState(false);
-  // Track start time for lights
   const [flareStartTime, setFlareStartTime] = useState(0);
 
-  // REDUCED PARTICLE COUNT (60-70% reduction from 200)
-  const particleCount = 70; 
-  const [initialData] = useState(() => {
+  // OPTIMIZATION: Particle Count Cap
+  // Lowered slightly to prevent "explosion" feel while maintaining visual density
+  const particleCount = quality.tier === 'HIGH' ? 60 : 25;
+
+  // UseMemo for stable buffer initialization
+  const initialData = useMemo(() => {
       const pos = new Float32Array(particleCount * 3);
       const vel = new Float32Array(particleCount * 3); 
       const colors = new Float32Array(particleCount * 3);
@@ -64,13 +65,19 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
       for(let i=0; i<particleCount*3; i++) pos[i] = -1000;
 
       return { pos, vel, colors, lifetimes, ages };
-  });
+  }, [particleCount]);
 
   const triggerFlare = useCallback(() => {
+      // Logic safety: If already flaring recently (within 500ms), ignore to prevent stacking
+      const now = Date.now();
+      if (flaring && (now - flareStartTime < 500)) return;
+
       setFlaring(true);
-      setFlareStartTime(Date.now()); 
+      setFlareStartTime(now);
+      // Only play audio if not spamming too hard is handled by parent, but nice to be safe
       audioManager.playFireWhoosh();
 
+      // Reset particles for the new flare
       if (particlesRef.current) {
           const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
           
@@ -78,22 +85,18 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
               initialData.ages[i] = 0;
               initialData.lifetimes[i] = 1.5 + Math.random() * 1.0;
 
-              // Tighter emitter at base
+              // Center emission
               positions[i * 3] = (Math.random() - 0.5) * 0.3;
               positions[i * 3 + 1] = 0.1 + Math.random() * 0.2;
               positions[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
               
-              // TUNED PHYSICS: LOWER & WIDER
-              // Spread (Horizontal): Increased for wider fan-out effect
+              // Explosive Upward Velocity
               initialData.vel[i * 3] = (Math.random() - 0.5) * 3.0; 
               initialData.vel[i * 3 + 2] = (Math.random() - 0.5) * 3.0;
-              
-              // Height (Vertical): Reduced to reach ~halfway up the tree
-              // Gravity is strong (3.0), so 5.0 - 7.0 vel is enough for a mid-height burst
               initialData.vel[i * 3 + 1] = 5.0 + Math.random() * 2.0; 
           }
       }
-  }, [initialData, particleCount]);
+  }, [flaring, flareStartTime, initialData, particleCount]);
 
   useEffect(() => {
     if (flareTrigger > lastTriggerRef.current) {
@@ -111,12 +114,14 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
   useFrame((state, delta) => {
     const time = state.clock.getElapsedTime();
 
-    // Base Fire Animation
+    // Idle animation
     if (fireGroupRef.current) {
-      fireGroupRef.current.children.forEach((child, i) => {
+      const len = fireGroupRef.current.children.length;
+      for (let i = 0; i < len; i++) {
+         const child = fireGroupRef.current.children[i];
          child.scale.y = 1 + Math.sin(time * 6 + i * 2) * 0.3;
          child.rotation.z = Math.sin(time * 3 + i) * 0.1;
-      });
+      }
     }
 
     if (flaring) {
@@ -126,9 +131,8 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
             const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
             const currentColors = particlesRef.current.geometry.attributes.color.array as Float32Array;
             
-            // SNAPPY PHYSICS
-            const gravity = 3.0; // Strong gravity for realistic rise and fall
-            const drag = 0.96; // Air resistance to curb infinite ascent
+            const gravity = 3.0;
+            const drag = 0.96;
             const windX = 0.2;
 
             for (let i = 0; i < particleCount; i++) {
@@ -138,6 +142,7 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
                     
                     const lifeRatio = initialData.ages[i] / initialData.lifetimes[i];
 
+                    // Physics math without object allocation
                     initialData.vel[i * 3] += (windX * delta * 0.5);
                     initialData.vel[i * 3 + 1] -= gravity * delta;
                     
@@ -149,37 +154,28 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
                     positions[i * 3 + 1] += initialData.vel[i * 3 + 1] * delta;
                     positions[i * 3 + 2] += initialData.vel[i * 3 + 2] * delta;
 
-                    // HDR Colors for Bloom
+                    // Color ramp
                     let r, g, b;
-                    
                     if (lifeRatio < 0.2) {
-                        // WHITE HOT CENTER
-                        r = 20.0;
-                        g = 15.0;
-                        b = 10.0;
+                        r = 20.0; g = 15.0; b = 10.0;
                     } else if (lifeRatio < 0.6) {
-                        // GOLDEN FIRE
-                        r = 10.0;
-                        g = 4.0;
-                        b = 0.5;
+                        r = 10.0; g = 4.0; b = 0.5;
                     } else {
-                        // DEEP RED FADE
                         const fade = 1.0 - ((lifeRatio - 0.6) * 2.5); 
-                        r = 5.0 * fade;
-                        g = 0.2 * fade;
-                        b = 0.0;
+                        r = 5.0 * fade; g = 0.2 * fade; b = 0.0;
                     }
                     
                     currentColors[i * 3] = r;
                     currentColors[i * 3 + 1] = g;
                     currentColors[i * 3 + 2] = b;
 
+                    // Ground collision
                     if (positions[i * 3 + 1] < 0) {
                         positions[i * 3 + 1] = 0;
-                        initialData.ages[i] = initialData.lifetimes[i];
+                        initialData.ages[i] = initialData.lifetimes[i]; // Kill it
                     }
                 } else {
-                    // Hide inactive particles
+                    // Hide dead particles
                     currentColors[i * 3] = 0;
                     currentColors[i * 3 + 1] = 0;
                     currentColors[i * 3 + 2] = 0;
@@ -194,8 +190,10 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
             setFlaring(false);
         }
     } else {
+        // Cleanup check: Ensure all particles are moved offscreen if not flaring
         if (particlesRef.current) {
              const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
+             // Check first particle as proxy
              if(positions[1] > -500) {
                  for(let i=0; i<particleCount; i++) positions[i*3+1] = -1000;
                  particlesRef.current.geometry.attributes.position.needsUpdate = true;
@@ -211,7 +209,6 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
 
   return (
     <group position={position} onClick={handleClick} onPointerOver={() => document.body.style.cursor = 'pointer'} onPointerOut={() => document.body.style.cursor = 'auto'}>
-      {/* Wood Logs */}
       <group>
          <mesh position={[0, 0.05, 0.2]} rotation={[0.2, 0, 0]} castShadow>
             <cylinderGeometry args={[0.06, 0.06, 0.6]} />
@@ -227,7 +224,6 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
          </mesh>
       </group>
 
-      {/* Dynamic Rising Lights */}
       {flaring && (
         <>
             <FlareLight active={flaring} startTime={simTime} offset={[0.2, 0, 0]} />
@@ -236,7 +232,6 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
         </>
       )}
 
-      {/* Fire Geometry (Base Idle Fire) */}
       <group ref={fireGroupRef} position={[0, 0.1, 0]}>
          <mesh position={[0, 0.2, 0]}>
             <coneGeometry args={[0.2, 0.5, 5]} />
@@ -248,8 +243,11 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
          </mesh>
       </group>
 
-      {/* Flare Particles */}
-      <points ref={particlesRef} frustumCulled={false} renderOrder={1}>
+      {/* 
+         KEY ADDED HERE: Force re-mount of points if particleCount changes. 
+         This prevents WebGL buffer mismatch errors when switching Quality tiers.
+      */}
+      <points key={particleCount} ref={particlesRef} frustumCulled={false} renderOrder={1}>
          <bufferGeometry>
             <bufferAttribute 
                 attach="attributes-position"
@@ -274,7 +272,6 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
          />
       </points>
 
-      {/* Static Warm Light for base fire - Removed castShadow */}
       <pointLight color="#ff6f00" intensity={1.5} distance={6} decay={2} />
     </group>
   );

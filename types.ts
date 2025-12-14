@@ -1,4 +1,5 @@
 import { Vector3 } from 'three';
+import { ThreeElements } from '@react-three/fiber';
 
 export interface Player {
   id: string;
@@ -34,4 +35,10 @@ export interface CeremonyState {
   active: boolean;
   progress: number; // 0 to 100
   target: number;
+}
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements extends ThreeElements {}
+  }
 }

@@ -1,156 +1,42 @@
-import React, { useState, useEffect, Suspense, useCallback, useRef } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, CameraShake } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import React, { useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { v4 as uuidv4 } from 'uuid';
 
-import { ChristmasTree } from './components/Tree';
-import { SnowGlobe } from './components/SnowGlobe';
-import { SimulatedUsers } from './components/SimulatedUsers';
-import { Overlay } from './components/Overlay';
-import { Gifts } from './components/Gifts';
-import { Campfire } from './components/Campfire';
-import { WillOTheWisp } from './components/WillOTheWisp'; // Replaced Snowman
-import { InventoryBar } from './components/InventoryBar';
-import { Fireworks } from './components/Fireworks';
-import { SantaAirdrop } from './components/SantaAirdrop';
-import { GameState, Decoration, CeremonyState, DecorationType } from './types';
-import { CEREMONY_TARGET } from './constants';
+import { GameProvider, useGame } from './context/GameContext';
 import { audioManager } from './utils/audio';
+import { DecorationType, Decoration } from './types';
 
-// Helper component to animate lights
-const SceneLighting = ({ isLit }: { isLit: boolean }) => {
-    return (
-        <>
-            <ambientLight intensity={isLit ? 0.3 : 0.02} color="#ccddff" />
-            <directionalLight 
-                position={[10, 20, 10]} 
-                intensity={isLit ? 0.8 : 0.05} 
-                castShadow 
-                shadow-mapSize={[1024, 1024]}
-                color="#aaddff"
-            />
-            <spotLight 
-                position={[0, 10, 0]} 
-                angle={0.5} 
-                penumbra={1} 
-                intensity={isLit ? 1 : 0} 
-                castShadow
-                color="#ffaa44"
-            />
-        </>
-    );
-};
+// UI Layouts
+import { Overlay } from './components/Overlay';
+import { InventoryBar } from './components/InventoryBar';
+import { SceneContainer } from './components/Scene/SceneContainer';
 
-const App: React.FC = () => {
-  const [gameState, setGameState] = useState<GameState>('LOBBY');
-  const [userName, setUserName] = useState('');
-  const [userColor, setUserColor] = useState('#ff0000');
+// --- MAIN LAYOUT COMPONENT ---
+// Separated to use the GameContext inside
+const GameLayout = () => {
+  const { state, dispatch } = useGame();
   
-  // Ceremony/Lighting State
-  const [ceremony, setCeremony] = useState<CeremonyState>({ active: false, progress: 0, target: CEREMONY_TARGET });
-  const [treeLit, setTreeLit] = useState(false);
-
-  // Decoration State - Initialize from LocalStorage
-  const [decorations, setDecorations] = useState<Decoration[]>(() => {
-      try {
-          const saved = localStorage.getItem('christmas_decorations');
-          return saved ? JSON.parse(saved) : [];
-      } catch (e) {
-          return [];
-      }
-  });
-
-  // OPTIMIZATION: Only write to storage when decorations change, NOT on every frame
-  useEffect(() => {
-      localStorage.setItem('christmas_decorations', JSON.stringify(decorations));
-  }, [decorations]);
-
+  // Local UI State (Doesn't need to be in Global Context)
   const [selectedType, setSelectedType] = useState<DecorationType>('orb');
   const [pendingPosition, setPendingPosition] = useState<THREE.Vector3 | null>(null);
   const [decorationMessage, setDecorationMessage] = useState('');
-
-  // Fireworks State
-  const [fireworksPos, setFireworksPos] = useState<THREE.Vector3 | null>(null);
-
-  // Super Nova Flash State
-  const [superNovaTrigger, setSuperNovaTrigger] = useState(0);
-
-  // Gift State
   const [activeGiftMsg, setActiveGiftMsg] = useState<string | null>(null);
-
-  // Static Snow Amount (No longer grows over time)
-  // 0.4 represents roughly 40% coverage based on the shader logic
-  const [snowAmount] = useState(0.4);
-
-  // Shake & Airdrop State
-  const [shakeIntensity, setShakeIntensity] = useState(0);
   const [airdropActive, setAirdropActive] = useState(false);
 
-  // Global Effects Triggers
-  const [globalFlareTrigger, setGlobalFlareTrigger] = useState(0);
-  const [heatWaveIntensity, setHeatWaveIntensity] = useState(0);
-  const lastKeyTime = useRef(0);
-
+  // Handlers
   const handleStart = (name: string, color: string) => {
-    setUserName(name);
-    setUserColor(color);
-    setGameState('DECORATING');
+    dispatch({ type: 'START_GAME', payload: { name, color } });
   };
 
-  useEffect(() => {
-    if (gameState === 'LOBBY') return;
-    
-    // Shake Decay for heatwave
-    const decay = setInterval(() => {
-        setShakeIntensity(prev => Math.max(0, prev * 0.9));
-        setHeatWaveIntensity(prev => Math.max(0, prev * 0.9));
-    }, 100);
+  const handlePowerToggle = () => {
+    dispatch({ type: 'TOGGLE_LIGHTS' });
+  };
 
-    return () => {
-        clearInterval(decay);
-    };
-  }, [gameState]);
-
-  // Keyboard Controls
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-        // IGNORE if user is typing in an input or textarea
-        const tag = (document.activeElement?.tagName || '').toUpperCase();
-        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-
-        if (gameState === 'LOBBY') return;
-        const now = Date.now();
-        // 200ms Debounce
-        if (now - lastKeyTime.current < 200) return;
-
-        if (e.key.toLowerCase() === 'g') {
-            lastKeyTime.current = now;
-            setGlobalFlareTrigger(prev => prev + 1);
-            setHeatWaveIntensity(2); // High intensity shake for heat wave
-        } else if (e.key.toLowerCase() === 'h') {
-            lastKeyTime.current = now;
-            setAirdropActive(true);
-        } else if (e.key.toLowerCase() === 'j') {
-            // FIREWORKS & SUPER NOVA TRIGGER
-            lastKeyTime.current = now;
-            setFireworksPos(new THREE.Vector3(0, 4.8, 0));
-            setSuperNovaTrigger(now);
-            audioManager.playFirework();
-        }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState]);
-
-  // Decoration Handler
   const handleDecorateStart = useCallback((point: THREE.Vector3) => {
-    if (!treeLit) return; 
+    if (!state.isLit) return; 
     setPendingPosition(point);
     setDecorationMessage(''); 
-  }, [treeLit]);
+  }, [state.isLit]);
 
   const handleConfirmDecoration = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,114 +46,49 @@ const App: React.FC = () => {
         id: uuidv4(),
         position: [pendingPosition.x, pendingPosition.y, pendingPosition.z],
         type: selectedType,
-        color: userColor,
-        sender: userName,
+        color: state.userColor,
+        sender: state.userName,
         message: decorationMessage || "Happy Holidays!",
         timestamp: Date.now()
     };
     
-    setDecorations(prev => [...prev, newDec]);
+    dispatch({ type: 'ADD_DECORATION', payload: newDec });
     audioManager.playChime(); 
     setPendingPosition(null);
   };
 
-  const handlePowerToggle = () => {
-      setTreeLit(prev => !prev);
-      setCeremony({ ...ceremony, active: false });
-  };
-
-  const handleStarClick = (pos: THREE.Vector3) => {
-    setFireworksPos(pos);
-    audioManager.playFirework();
-  };
-
-  const handleAirdropExplosion = () => {
-      audioManager.playFirework(); 
-      const newItems: Decoration[] = [];
-      const types: DecorationType[] = ['orb', 'star', 'candy', 'stocking'];
-      const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff'];
-
-      const spawnCount = 20;
-
-      for(let i = 0; i < spawnCount; i++) {
-          // Optimized Scattering Logic
-          // 1. Pick Height (Y). Bias towards lower values to distribute evenly over cone surface area.
-          // range 0 to 1, biased towards 0
-          const distBias = 1 - Math.sqrt(Math.random());
-          
-          // Map to Tree Vertical Range: 1.5 (bottom branches) to 4.0 (top branches)
-          const minY = 1.5;
-          const maxY = 4.0;
-          const y = minY + (distBias * (maxY - minY));
-          
-          // 2. Calculate Radius at this Y
-          // Base radius at Y=1.5 is approx 1.6. Radius at top (Y=4.5) is 0.
-          // Linear cone slope calculation
-          const treeHeight = 3.0; // 4.5 - 1.5
-          const heightFromBase = y - 1.5;
-          const radiusAtY = 1.6 * (1 - (heightFromBase / treeHeight));
-          
-          // 3. Random Angle
-          const theta = Math.random() * Math.PI * 2;
-          
-          newItems.push({
-              id: uuidv4(),
-              position: [radiusAtY * Math.cos(theta), y, radiusAtY * Math.sin(theta)],
-              type: types[Math.floor(Math.random() * types.length)],
-              color: colors[Math.floor(Math.random() * colors.length)],
-              sender: 'Santa',
-              message: 'Ho Ho Ho!',
-              timestamp: Date.now()
-          });
-      }
-      setDecorations(prev => [...prev, ...newItems]);
-      
-      // Also trigger a fireworks burst at top
-      setFireworksPos(new THREE.Vector3(0, 4.8, 0));
-  };
-
-  // Shake Detection for SnowGlobe particles only
-  const handlePointerMove = (e: React.PointerEvent) => {
-      const speed = Math.abs(e.movementX) + Math.abs(e.movementY);
-      if (speed > 5) {
-          setShakeIntensity(prev => Math.min(1.5, prev + speed * 0.002));
-      }
-  };
-
-  const isNight = true;
-  const bgColor = treeLit ? '#050510' : '#020205';
+  const bgColor = state.isLit ? '#050510' : '#020205';
 
   return (
-    <div 
-        style={{ backgroundColor: bgColor, width: '100%', height: '100%', transition: 'background-color 2s ease' }}
-        onPointerMove={handlePointerMove}
-    >
+    <div style={{ backgroundColor: bgColor, width: '100%', height: '100%', transition: 'background-color 2s ease' }}>
+      
+      {/* 1. UI OVERLAY LAYER (DOM) */}
       <Overlay 
-        gameState={gameState} 
+        gameState={state.gameState} 
         onStart={handleStart}
-        ceremony={ceremony}
+        ceremony={state.ceremony}
         onPowerClick={handlePowerToggle}
         activeGiftMessage={activeGiftMsg}
         onCloseGift={() => setActiveGiftMsg(null)}
-        isLightsOn={treeLit}
+        isLightsOn={state.isLit}
       />
 
-      {/* Airdrop Button (Top Right) */}
-      {treeLit && (
+      {/* Airdrop Button */}
+      {state.isLit && (
           <button 
             onClick={() => setAirdropActive(true)}
-            className="absolute top-20 right-4 z-50 bg-red-600 hover:bg-red-500 text-white p-2 rounded-full border-2 border-white shadow-lg font-bold text-xs"
+            className="absolute top-20 right-4 z-50 bg-red-600 hover:bg-red-500 text-white p-2 rounded-full border-2 border-white shadow-lg font-bold text-xs pointer-events-auto"
           >
               🎁 DROP
           </button>
       )}
 
       {/* Inventory Bar */}
-      {gameState === 'DECORATING' && treeLit && (
+      {state.gameState === 'DECORATING' && state.isLit && (
           <InventoryBar selectedType={selectedType} onSelect={setSelectedType} />
       )}
 
-      {/* Message Input Modal */}
+      {/* Decoration Modal */}
       {pendingPosition && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-auto">
               <form onSubmit={handleConfirmDecoration} className="bg-[#1a1a2e] p-6 rounded-lg border border-white/20 shadow-xl w-80">
@@ -300,97 +121,24 @@ const App: React.FC = () => {
           </div>
       )}
 
-      <Canvas shadows dpr={[1, 2]}>
-        {/* Camera Reset: High, Wide angle for full view, Low Near Clip for Particles */}
-        <PerspectiveCamera makeDefault position={[0, 10, 25]} fov={45} near={0.01} />
-        
-        {/* Heatwave Shake Effect - Only active on G key press */}
-        <CameraShake 
-            maxPitch={0.1 * heatWaveIntensity} 
-            maxYaw={0.1 * heatWaveIntensity} 
-            maxRoll={0.1 * heatWaveIntensity} 
-            yawFrequency={10} 
-            pitchFrequency={10} 
-            rollFrequency={10}
-            intensity={heatWaveIntensity} 
-        />
-
-        {/* OrbitControls: Clean Hard Reset */}
-        <OrbitControls 
-            makeDefault
-            target={[0, 0, 0]}
-            enablePan={false}
-            enableDamping={true}
-            dampingFactor={0.05}
-            minDistance={5}
-            maxDistance={50}
-            // Fully Unlock Angles for 360 sphere rotation
-            minAzimuthAngle={-Infinity}
-            maxAzimuthAngle={Infinity}
-            // Limit polar angle to 90 degrees (Math.PI / 2) to prevent going below ground
-            minPolarAngle={0}
-            maxPolarAngle={Math.PI / 2 - 0.05}
-            // Disable auto rotate for manual control
-            autoRotate={false}
-        />
-
-        <SceneLighting isLit={treeLit} />
-
-        <Suspense fallback={null}>
-            <SnowGlobe isNight={isNight} shakeIntensity={shakeIntensity} />
-            
-            <ChristmasTree 
-                snowAmount={snowAmount} 
-                onDecorateStart={handleDecorateStart}
-                decorations={decorations}
-                isLit={treeLit}
-                onStarClick={handleStarClick}
-                superNovaTrigger={superNovaTrigger}
-            />
-
-            <SantaAirdrop 
-                isActive={airdropActive} 
-                onComplete={() => setAirdropActive(false)}
-                onExplode={handleAirdropExplosion}
-            />
-
-            {fireworksPos && (
-                <Fireworks 
-                    position={[fireworksPos.x, fireworksPos.y, fireworksPos.z]} 
-                    onComplete={() => setFireworksPos(null)} 
-                />
-            )}
-
-            <Campfire position={[4, 0, 2]} flareTrigger={globalFlareTrigger} />
-            <Campfire position={[-3, 0, 3]} flareTrigger={globalFlareTrigger} />
-            <Campfire position={[0, 0, -5]} flareTrigger={globalFlareTrigger} />
-
-            {/* Replaced Snowmen with Will-o'-the-Wisps - INCREASED COUNT */}
-            <WillOTheWisp position={[-3, 0, -2]} color="#00ffff" />
-            <WillOTheWisp position={[2.5, 0, 4]} color="#ffaa00" />
-            <WillOTheWisp position={[4.5, 0, -3]} color="#00ffaa" />
-            <WillOTheWisp position={[-2, 1, 3]} color="#b388ff" />
-            <WillOTheWisp position={[3, 1, -4]} color="#ff00ff" />
-            <WillOTheWisp position={[0, 2, -5]} color="#00ff00" />
-            <WillOTheWisp position={[-4, 1.5, 0]} color="#00ffff" />
-            <WillOTheWisp position={[1, 0.5, 4]} color="#ffaa00" />
-
-            <Gifts onOpen={setActiveGiftMsg} />
-            
-            <SimulatedUsers />
-        </Suspense>
-
-        <EffectComposer enableNormalPass={false}>
-            <Bloom 
-                luminanceThreshold={treeLit ? 1.0 : 4.0} // Very high threshold when off to strictly disable bloom
-                mipmapBlur 
-                intensity={treeLit ? 1.5 : 0} // Zero intensity when off
-                radius={0.4}
-            />
-            <Vignette eskil={false} offset={0.1} darkness={1.1} />
-        </EffectComposer>
-      </Canvas>
+      {/* 2. 3D SCENE LAYER (Canvas) */}
+      <SceneContainer 
+        onDecorateStart={handleDecorateStart}
+        onGiftOpen={setActiveGiftMsg}
+        onAirdropStart={() => setAirdropActive(true)}
+        airdropActive={airdropActive}
+        setAirdropActive={setAirdropActive}
+      />
     </div>
+  );
+};
+
+// --- APP ROOT ---
+const App = () => {
+  return (
+    <GameProvider>
+      <GameLayout />
+    </GameProvider>
   );
 };
 
