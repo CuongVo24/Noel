@@ -52,8 +52,21 @@ const App: React.FC = () => {
   const [ceremony, setCeremony] = useState<CeremonyState>({ active: false, progress: 0, target: CEREMONY_TARGET });
   const [treeLit, setTreeLit] = useState(false);
 
-  // Decoration State
-  const [decorations, setDecorations] = useState<Decoration[]>([]);
+  // Decoration State - Initialize from LocalStorage
+  const [decorations, setDecorations] = useState<Decoration[]>(() => {
+      try {
+          const saved = localStorage.getItem('christmas_decorations');
+          return saved ? JSON.parse(saved) : [];
+      } catch (e) {
+          return [];
+      }
+  });
+
+  // OPTIMIZATION: Only write to storage when decorations change, NOT on every frame
+  useEffect(() => {
+      localStorage.setItem('christmas_decorations', JSON.stringify(decorations));
+  }, [decorations]);
+
   const [selectedType, setSelectedType] = useState<DecorationType>('orb');
   const [pendingPosition, setPendingPosition] = useState<THREE.Vector3 | null>(null);
   const [decorationMessage, setDecorationMessage] = useState('');
@@ -67,8 +80,9 @@ const App: React.FC = () => {
   // Gift State
   const [activeGiftMsg, setActiveGiftMsg] = useState<string | null>(null);
 
-  // Time simulation
-  const [snowAmount, setSnowAmount] = useState(0);
+  // Static Snow Amount (No longer grows over time)
+  // 0.4 represents roughly 40% coverage based on the shader logic
+  const [snowAmount] = useState(0.4);
 
   // Shake & Airdrop State
   const [shakeIntensity, setShakeIntensity] = useState(0);
@@ -87,10 +101,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (gameState === 'LOBBY') return;
-    const interval = setInterval(() => {
-        setSnowAmount(prev => Math.min(prev + 0.005, 0.8));
-    }, 1000);
-
+    
     // Shake Decay for heatwave
     const decay = setInterval(() => {
         setShakeIntensity(prev => Math.max(0, prev * 0.9));
@@ -98,7 +109,6 @@ const App: React.FC = () => {
     }, 100);
 
     return () => {
-        clearInterval(interval);
         clearInterval(decay);
     };
   }, [gameState]);

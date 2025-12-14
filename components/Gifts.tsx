@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSpring, animated } from '@react-spring/three';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Gift } from '../types';
 
 // Static mock gifts
@@ -32,23 +33,53 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   const HALF_SIZE = SIZE / 2;
   
   // LID CONFIGURATION
-  // The Lid is a solid plate that sits ON TOP of the walls.
-  // Walls end at y = SIZE = 0.5 (relative to ground) if box is placed at y=0.
-  // Pivot is at y = SIZE.
   const LID_THICKNESS = 0.04;
   const SNOW_HEIGHT = 0.06;
-  const SNOW_SIZE = SIZE * 0.9; // INSET: 90% of lid size to prevent z-fighting
+  const SNOW_SIZE = SIZE * 0.9; 
 
-  // Vertical Stacking Relative to Pivot (y=0 in Lid Group)
-  // 1. Lid Mesh Bottom = 0. Lid Mesh Center Y = LID_THICKNESS / 2.
   const LID_MESH_Y = LID_THICKNESS / 2;
-  
-  // 2. Snow Mesh Bottom = LID_THICKNESS. Snow Mesh Center Y = LID_THICKNESS + SNOW_HEIGHT / 2.
-  // We add a tiny epsilon (0.001) to ensure no z-fighting with lid top
   const SNOW_MESH_Y = LID_THICKNESS + (SNOW_HEIGHT / 2) + 0.001;
 
   // Memoize random rotation
   const [rotation] = useState(() => [0, Math.random() * Math.PI, 0] as [number, number, number]);
+
+  // OPTIMIZATION: Merge Geometries for Box Body (Reduces 5 draw calls to 1)
+  const bodyGeometry = useMemo(() => {
+    const geometries = [];
+
+    // 1. Bottom
+    const bottom = new THREE.BoxGeometry(SIZE, WALL_THICKNESS, SIZE);
+    bottom.translate(0, -HALF_SIZE + (WALL_THICKNESS/2), 0);
+    geometries.push(bottom);
+
+    // 2. Left
+    const left = new THREE.BoxGeometry(WALL_THICKNESS, SIZE, SIZE);
+    left.translate(-HALF_SIZE + (WALL_THICKNESS/2), 0, 0);
+    geometries.push(left);
+
+    // 3. Right
+    const right = new THREE.BoxGeometry(WALL_THICKNESS, SIZE, SIZE);
+    right.translate(HALF_SIZE - (WALL_THICKNESS/2), 0, 0);
+    geometries.push(right);
+
+    // 4. Front
+    const front = new THREE.BoxGeometry(SIZE - (WALL_THICKNESS*2), SIZE, WALL_THICKNESS);
+    front.translate(0, 0, HALF_SIZE - (WALL_THICKNESS/2));
+    geometries.push(front);
+
+    // 5. Back
+    const back = new THREE.BoxGeometry(SIZE - (WALL_THICKNESS*2), SIZE, WALL_THICKNESS);
+    back.translate(0, 0, -HALF_SIZE + (WALL_THICKNESS/2));
+    geometries.push(back);
+
+    // Merge
+    const merged = mergeGeometries(geometries);
+    
+    // Cleanup source geometries
+    geometries.forEach(g => g.dispose());
+    
+    return merged;
+  }, [SIZE, WALL_THICKNESS, HALF_SIZE]);
 
   // Spring animation for Lid Opening
   const { lidRotation } = useSpring({
@@ -67,41 +98,23 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   const wallMaterial = new THREE.MeshStandardMaterial({
       color: gift.color,
       roughness: 0.8,
-      side: THREE.DoubleSide, // Needed for walls to be visible inside and out
+      side: THREE.DoubleSide, 
   });
 
   return (
     <group position={gift.position} rotation={rotation} onClick={handleClick}>
       
-      {/* --- HOLLOW BODY (5 Separate Walls) --- */}
-      {/* Walls are shifted up by HALF_SIZE so bottom aligns with ground (y=0) if group is at y=0 */}
+      {/* --- HOLLOW BODY (Optimized: Single Mesh) --- */}
+      {/* Walls are shifted up by HALF_SIZE in the merged geometry logic relative to this group */}
       <group position={[0, HALF_SIZE, 0]}>
-          {/* Bottom Floor */}
-          <mesh position={[0, -HALF_SIZE + (WALL_THICKNESS/2), 0]} castShadow receiveShadow material={wallMaterial}>
-              <boxGeometry args={[SIZE, WALL_THICKNESS, SIZE]} />
-          </mesh>
-          
-          {/* Left Wall */}
-          <mesh position={[-HALF_SIZE + (WALL_THICKNESS/2), 0, 0]} castShadow receiveShadow material={wallMaterial}>
-              <boxGeometry args={[WALL_THICKNESS, SIZE, SIZE]} />
-          </mesh>
+          <mesh 
+            geometry={bodyGeometry} 
+            material={wallMaterial} 
+            castShadow 
+            receiveShadow 
+          />
 
-          {/* Right Wall */}
-          <mesh position={[HALF_SIZE - (WALL_THICKNESS/2), 0, 0]} castShadow receiveShadow material={wallMaterial}>
-              <boxGeometry args={[WALL_THICKNESS, SIZE, SIZE]} />
-          </mesh>
-
-          {/* Front Wall */}
-          <mesh position={[0, 0, HALF_SIZE - (WALL_THICKNESS/2)]} castShadow receiveShadow material={wallMaterial}>
-              <boxGeometry args={[SIZE - (WALL_THICKNESS*2), SIZE, WALL_THICKNESS]} />
-          </mesh>
-
-          {/* Back Wall */}
-          <mesh position={[0, 0, -HALF_SIZE + (WALL_THICKNESS/2)]} castShadow receiveShadow material={wallMaterial}>
-              <boxGeometry args={[SIZE - (WALL_THICKNESS*2), SIZE, WALL_THICKNESS]} />
-          </mesh>
-
-          {/* External Ribbons (Decals) */}
+          {/* External Ribbons (Decals) - Kept separate as they are transparent decals */}
           <mesh position={[0, 0, HALF_SIZE + 0.001]}>
               <planeGeometry args={[0.08, SIZE]} />
               <meshStandardMaterial color="#ffffff" side={THREE.DoubleSide} transparent opacity={0.9} />

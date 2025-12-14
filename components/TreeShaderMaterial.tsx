@@ -78,14 +78,14 @@ export const TreeSnowMaterial: React.FC<TreeSnowMaterialProps> = ({ color, snowA
       '#include <worldpos_vertex>',
       `
       #include <worldpos_vertex>
-      // Calculate world position
+      // Calculate world position for static noise reference
       vPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
-      // Calculate world normal for robust "Up" detection
+      // Calculate world normal to ensure snow sits on TOP surfaces
       vWorldNormal = normalize(mat3(modelMatrix) * normal);
       `
     );
 
-    // 3. Fragment Shader: Inject Noise and Mixing Logic
+    // 3. Fragment Shader: Inject Static Noise Logic
     shader.fragmentShader = `
       uniform float uSnowAmount;
       uniform vec3 uSnowColor;
@@ -100,25 +100,40 @@ export const TreeSnowMaterial: React.FC<TreeSnowMaterialProps> = ({ color, snowA
       `
       #include <dithering_fragment>
 
-      // Calculate Up-ness based on WORLD SPACE normal
+      // 1. Determine "Up-ness" (How much is this pixel facing the sky?)
       float upDot = normalize(vWorldNormal).y;
 
-      // Noise Generation based on World Position (scaled for texture density)
-      float noiseVal = snoise(vPos * 2.5); // Scale 2.5 determines patch size
+      // 2. Generate Static Noise based on World Position
+      // Scale (3.5) determines the size of the snow clumps
+      float noiseVal = snoise(vPos * 3.5); 
       
-      // Normalize noise from [-1,1] to [0,1]
+      // Normalize noise from [-1, 1] to [0, 1]
       float n = (noiseVal + 1.0) * 0.5;
 
-      // Patchy Logic: Combine Up-ness with Noise
-      // Snow appears if surface faces up AND noise value is high.
+      // 3. Define Snow Patches
+      // Condition: Surface must face up (>0.3) AND Noise value must be high
       
-      float threshold = 0.6 - (uSnowAmount * 0.5); // As snow amount increases, threshold drops
-      float snowFactor = smoothstep(threshold, threshold + 0.1, upDot * n);
+      // We combine Up-ness and Noise
+      // The 'uSnowAmount' uniform now shifts the threshold.
+      // Higher uSnowAmount = Lower threshold = More snow.
       
-      // Ensure we only get snow on UP facing normals (vWorldNormal.y > 0)
-      snowFactor *= smoothstep(0.0, 0.2, upDot);
+      // Base threshold for noise (inverse of amount)
+      // If amount is 0.4, threshold is roughly 0.6
+      float threshold = 1.0 - (uSnowAmount * 0.8); 
+      
+      // Calculate final snow mix factor
+      // We use smoothstep with a small range (0.05) for SHARP transitions (distinct piles)
+      // We multiply n * upDot so snow naturally prefers flat top surfaces
+      
+      float combinedSignal = n * smoothstep(0.0, 0.5, upDot);
+      
+      float snowFactor = smoothstep(threshold - 0.05, threshold + 0.05, combinedSignal);
 
-      vec3 finalColor = mix(gl_FragColor.rgb, uSnowColor, snowFactor * clamp(uSnowAmount * 1.5, 0.0, 1.0));
+      // Force snow to be zero on bottom faces
+      snowFactor *= step(0.1, upDot);
+
+      // Mix Tree Green with Snow White
+      vec3 finalColor = mix(gl_FragColor.rgb, uSnowColor, snowFactor);
       
       gl_FragColor = vec4(finalColor, gl_FragColor.a);
       `
@@ -135,9 +150,9 @@ export const TreeSnowMaterial: React.FC<TreeSnowMaterialProps> = ({ color, snowA
     <meshStandardMaterial
       ref={materialRef}
       color={color}
-      roughness={0.9} // Increased roughness for foliage
+      roughness={0.9} 
       metalness={0.0}
-      side={THREE.DoubleSide} // CRITICAL: Ensures snow is visible on all leaf faces
+      side={THREE.DoubleSide}
       onBeforeCompile={onBeforeCompile}
     />
   );

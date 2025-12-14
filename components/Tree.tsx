@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { TreeSnowMaterial } from './TreeShaderMaterial';
@@ -48,6 +48,13 @@ export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart
     }
     return new THREE.CanvasTexture(canvas);
   }, []);
+
+  // OPTIMIZATION: Fix Memory Leak - Dispose Texture
+  useEffect(() => {
+    return () => {
+        glowTexture.dispose();
+    };
+  }, [glowTexture]);
 
   useFrame((state) => {
     const time = state.clock.getElapsedTime();
