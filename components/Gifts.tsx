@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useSpring, animated } from '@react-spring/three';
-import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Gift } from '../types';
@@ -19,6 +18,76 @@ const STATIC_GIFTS: Gift[] = [
     { id: 'g10', position: [2, 0, 2.5], color: '#607d8b', message: 'Merry Xmas!', sender: 'Colleague', opened: false },
 ];
 
+// --- ORGANIC SNOW CAP GENERATOR (PROCEDURAL) ---
+const OrganicSnowCap = ({ size }: { size: number }) => {
+  const geometry = useMemo(() => {
+    // 1. Create High-Res Plane (64x64 for smooth curves)
+    // Scale 1.25x to allow significant overhang
+    const geo = new THREE.PlaneGeometry(size * 1.25, size * 1.25, 64, 64);
+    
+    // 2. Displace Vertices (The "Melting Pile" Logic)
+    const posAttribute = geo.attributes.position;
+    
+    for (let i = 0; i < posAttribute.count; i++) {
+        const x = posAttribute.getX(i);
+        const y = posAttribute.getY(i);
+        
+        // Calculate distance from center
+        const dist = Math.sqrt(x * x + y * y);
+        const radius = size * 0.55; // box edge threshold
+        const maxHeight = 0.15 * size; // Taller peak for accumulation
+
+        // BASE SHAPE: Domed center
+        // smoothstep(0, radius, dist) creates a value from 0 (center) to 1 (edge)
+        let h = maxHeight * (1 - THREE.MathUtils.smoothstep(0, radius, dist));
+
+        // NOISE: Low frequency "clumps" + High frequency details
+        // We use Math.sin/cos as a cheap deterministic noise
+        const clumping = Math.sin(x * 6) * Math.cos(y * 6) * 0.02; // Large bumps
+        const grain = (Math.random() - 0.5) * 0.005; // Tiny surface roughness
+        h += clumping + grain;
+
+        // PHYSICS: GRAVITY DROOP
+        // If past the edge of the box, snow hangs down heavily
+        if (dist > size * 0.48) {
+            // Calculate how far past the edge we are
+            const overhang = dist - (size * 0.48);
+            // Exponential dropoff to simulate wet, heavy snow pulling down
+            const droop = overhang * 4.0 + (overhang * overhang * 10.0);
+            h -= droop;
+        }
+
+        // Apply new height (Z in local space)
+        posAttribute.setZ(i, h);
+    }
+
+    geo.computeVertexNormals();
+    return geo;
+  }, [size]);
+
+  return (
+    <mesh 
+      geometry={geometry} 
+      rotation={[-Math.PI / 2, 0, 0]} 
+      position={[0, 0.002, 0]} 
+      castShadow 
+      receiveShadow
+    >
+      {/* 
+         Use MeshPhysicalMaterial for 'clearcoat' to simulate a wet/icy surface layer.
+         Color is slightly blue-tinted white for coldness.
+      */}
+      <meshPhysicalMaterial 
+        color="#f8fafd" 
+        roughness={0.7} 
+        metalness={0.1}
+        clearcoat={0.5}
+        clearcoatRoughness={0.2}
+      />
+    </mesh>
+  );
+};
+
 interface GiftBoxProps {
   gift: Gift;
   onOpen: (msg: string) => void;
@@ -27,61 +96,45 @@ interface GiftBoxProps {
 const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   const [active, setActive] = useState(false);
   
-  // --- DIMENSIONS & CONSTANTS ---
   const SIZE = 0.5;
   const WALL_THICKNESS = 0.02; 
   const HALF_SIZE = SIZE / 2;
-  
-  // LID CONFIGURATION
   const LID_THICKNESS = 0.04;
-  const SNOW_HEIGHT = 0.06;
-  const SNOW_SIZE = SIZE * 0.9; 
-
   const LID_MESH_Y = LID_THICKNESS / 2;
-  const SNOW_MESH_Y = LID_THICKNESS + (SNOW_HEIGHT / 2) + 0.001;
 
-  // Memoize random rotation
+  // Static random rotation for natural placement
   const [rotation] = useState(() => [0, Math.random() * Math.PI, 0] as [number, number, number]);
 
-  // OPTIMIZATION: Merge Geometries for Box Body (Reduces 5 draw calls to 1)
+  // Merge geometries for the box body for performance
   const bodyGeometry = useMemo(() => {
     const geometries = [];
-
-    // 1. Bottom
+    // Bottom
     const bottom = new THREE.BoxGeometry(SIZE, WALL_THICKNESS, SIZE);
     bottom.translate(0, -HALF_SIZE + (WALL_THICKNESS/2), 0);
     geometries.push(bottom);
-
-    // 2. Left
+    // Left
     const left = new THREE.BoxGeometry(WALL_THICKNESS, SIZE, SIZE);
     left.translate(-HALF_SIZE + (WALL_THICKNESS/2), 0, 0);
     geometries.push(left);
-
-    // 3. Right
+    // Right
     const right = new THREE.BoxGeometry(WALL_THICKNESS, SIZE, SIZE);
     right.translate(HALF_SIZE - (WALL_THICKNESS/2), 0, 0);
     geometries.push(right);
-
-    // 4. Front
+    // Front
     const front = new THREE.BoxGeometry(SIZE - (WALL_THICKNESS*2), SIZE, WALL_THICKNESS);
     front.translate(0, 0, HALF_SIZE - (WALL_THICKNESS/2));
     geometries.push(front);
-
-    // 5. Back
+    // Back
     const back = new THREE.BoxGeometry(SIZE - (WALL_THICKNESS*2), SIZE, WALL_THICKNESS);
     back.translate(0, 0, -HALF_SIZE + (WALL_THICKNESS/2));
     geometries.push(back);
 
-    // Merge
     const merged = mergeGeometries(geometries);
-    
-    // Cleanup source geometries
     geometries.forEach(g => g.dispose());
-    
     return merged;
-  }, [SIZE, WALL_THICKNESS, HALF_SIZE]);
+  }, [SIZE]);
 
-  // Spring animation for Lid Opening
+  // Animation
   const { lidRotation } = useSpring({
     lidRotation: active ? -Math.PI / 1.5 : 0, 
     config: { tension: 180, friction: 12 }
@@ -90,12 +143,10 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   const handleClick = (e: any) => {
     e.stopPropagation();
     setActive(!active);
-    if (!active) {
-        onOpen(gift.message);
-    }
+    if (!active) onOpen(gift.message);
   };
 
-  const wallMaterial = new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshStandardMaterial({
       color: gift.color,
       roughness: 0.8,
       side: THREE.DoubleSide, 
@@ -104,17 +155,15 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   return (
     <group position={gift.position} rotation={rotation} onClick={handleClick}>
       
-      {/* --- HOLLOW BODY (Optimized: Single Mesh) --- */}
-      {/* Walls are shifted up by HALF_SIZE in the merged geometry logic relative to this group */}
+      {/* Box Body */}
       <group position={[0, HALF_SIZE, 0]}>
           <mesh 
             geometry={bodyGeometry} 
-            material={wallMaterial} 
+            material={material} 
             castShadow 
             receiveShadow 
           />
-
-          {/* External Ribbons (Decals) - Kept separate as they are transparent decals */}
+          {/* Ribbons */}
           <mesh position={[0, 0, HALF_SIZE + 0.001]}>
               <planeGeometry args={[0.08, SIZE]} />
               <meshStandardMaterial color="#ffffff" side={THREE.DoubleSide} transparent opacity={0.9} />
@@ -125,41 +174,33 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
           </mesh>
       </group>
 
-      {/* --- HINGED LID --- */}
-      {/* Pivot Point: Top Back Edge of the box. y=SIZE (0.5), z=-HALF_SIZE (-0.25) */}
+      {/* Box Lid */}
       {/* @ts-ignore */}
       <animated.group position={[0, SIZE, -HALF_SIZE]} rotation-x={lidRotation}>
-          
-          {/* Offset the content so the pivot acts on the back edge */}
           <group position={[0, 0, HALF_SIZE]}>
             
-            {/* 1. Main Lid Plate */}
-            <mesh position={[0, LID_MESH_Y, 0]} castShadow receiveShadow material={wallMaterial}>
+            {/* Rigid Lid Part */}
+            <mesh position={[0, LID_MESH_Y, 0]} castShadow receiveShadow material={material}>
                 <boxGeometry args={[SIZE, LID_THICKNESS, SIZE]} />
             </mesh>
 
-            {/* 2. Snow Cap - Inset to fix side artifacts */}
-            <RoundedBox 
-                args={[SNOW_SIZE, SNOW_HEIGHT, SNOW_SIZE]} 
-                radius={0.02} 
-                smoothness={4}
-                position={[0, SNOW_MESH_Y, 0]}
-            >
-                <meshStandardMaterial color="#ffffff" roughness={1.0} side={THREE.FrontSide} />
-            </RoundedBox>
-
-            {/* Bow on top of snow */}
-            <mesh position={[0, SNOW_MESH_Y + (SNOW_HEIGHT/2) + 0.04, 0]}>
-                <sphereGeometry args={[0.08]} />
-                <meshStandardMaterial color="#ffffff" roughness={0.9} />
-            </mesh>
+            {/* NEW: PROCEDURAL ORGANIC SNOW CAP */}
+            <group position={[0, LID_THICKNESS, 0]}>
+                <OrganicSnowCap size={SIZE} />
+                
+                {/* Decorative Bow (Sitting in the snow) */}
+                <mesh position={[0, 0.06, 0]}>
+                    <sphereGeometry args={[0.08]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.9} />
+                </mesh>
+            </group>
 
           </group>
       </animated.group>
 
-      {/* Fake Ground Shadow */}
+      {/* Fake Ambient Shadow */}
       <mesh position={[0, 0.01, 0]} rotation={[-Math.PI/2, 0, 0]}>
-         <planeGeometry args={[SIZE * 1.2, SIZE * 1.2]} />
+         <planeGeometry args={[SIZE * 1.3, SIZE * 1.3]} />
          <meshBasicMaterial color="#000000" opacity={0.3} transparent />
       </mesh>
     </group>

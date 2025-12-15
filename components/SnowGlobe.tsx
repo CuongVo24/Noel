@@ -31,30 +31,30 @@ export const SnowGlobe: React.FC<{ isNight: boolean; shakeIntensity: number }> =
       <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
       <ShootingStars />
 
-      {/* The Glass Sphere */}
+      {/* The Glass Sphere - THIN FILM CONFIGURATION */}
       <mesh ref={glassRef} receiveShadow>
         <sphereGeometry args={[SNOW_GLOBE_RADIUS, 64, 64]} />
         <meshPhysicalMaterial
-          transmission={0.9} // High transmission for glass
+          transmission={0.98} // Very clear
           opacity={1}
-          metalness={0.1}
-          roughness={0.0} // Perfectly smooth
-          reflectivity={0.5} // Clear reflections
-          ior={1.5} // Index of refraction for glass
-          thickness={0.1}
+          metalness={0.0}
+          roughness={0.0} 
+          ior={1.5} 
+          thickness={0} // IMPORTANT: 0 disables volumetric refraction logic, removing the "lens" distortion
           clearcoat={1}
           clearcoatRoughness={0}
-          color="#ffffff" // Neutral glass color
-          side={THREE.DoubleSide}
+          color="#eefeff" // Very subtle tint
+          side={THREE.FrontSide} // Only render outer shell to avoid internal reflection artifacts
           transparent
+          envMapIntensity={1.5}
         />
       </mesh>
 
       {/* Snow Floor - Base Layer with more bumps */}
       <group position={[0, -0.05, 0]}>
-         {/* Main Flat Floor */}
+         {/* Main Flat Floor - Reduced radius to strictly avoid glass intersection */}
          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-            <circleGeometry args={[SNOW_GLOBE_RADIUS - 0.5, 64]} />
+            <circleGeometry args={[SNOW_GLOBE_RADIUS - 0.8, 64]} />
             <meshStandardMaterial 
                 color="#ffffff" 
                 roughness={1} 
@@ -80,12 +80,12 @@ export const SnowGlobe: React.FC<{ isNight: boolean; shakeIntensity: number }> =
 
       {/* Reflective Ice Patches on top */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
-        <circleGeometry args={[SNOW_GLOBE_RADIUS - 1, 64]} />
+        <circleGeometry args={[SNOW_GLOBE_RADIUS - 1.2, 64]} />
         <MeshReflectorMaterial
           blur={[300, 100]}
           resolution={1024}
           mixBlur={1}
-          mixStrength={30}
+          mixStrength={15} // Reduced strength to prevent noise
           roughness={0.5}
           depthScale={1.2}
           minDepthThreshold={0.4}

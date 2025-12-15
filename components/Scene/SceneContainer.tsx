@@ -30,9 +30,15 @@ const SceneLighting = ({ isLit, shadowsEnabled }: { isLit: boolean, shadowsEnabl
     return (
         <>
             <ambientLight intensity={isLit ? 0.3 : 0.02} color="#ccddff" />
+            
+            {/* Ambient ground reflection - helps the snow look grounded, not floating in black void */}
+            <hemisphereLight 
+                args={['#202040', '#050505', isLit ? 0.4 : 0.1]} 
+            />
+
             <directionalLight 
                 position={[10, 20, 10]} 
-                intensity={isLit ? 0.8 : 0.05} 
+                intensity={isLit ? 0.9 : 0.05} 
                 castShadow={shadowsEnabled} 
                 shadow-mapSize={[1024, 1024]}
                 color="#aaddff"

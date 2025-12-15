@@ -1,6 +1,3 @@
-import { Vector3 } from 'three';
-import { ThreeElements } from '@react-three/fiber';
-
 export interface Player {
   id: string;
   name: string;
@@ -39,6 +36,34 @@ export interface CeremonyState {
 
 declare global {
   namespace JSX {
-    interface IntrinsicElements extends ThreeElements {}
+    interface IntrinsicElements {
+      mesh: any;
+      group: any;
+      coneGeometry: any;
+      cylinderGeometry: any;
+      meshStandardMaterial: any;
+      meshBasicMaterial: any;
+      meshPhysicalMaterial: any;
+      sphereGeometry: any;
+      pointLight: any;
+      ambientLight: any;
+      spotLight: any;
+      hemisphereLight: any;
+      directionalLight: any;
+      primitive: any;
+      planeGeometry: any;
+      torusGeometry: any;
+      boxGeometry: any;
+      capsuleGeometry: any;
+      octahedronGeometry: any;
+      circleGeometry: any;
+      sprite: any;
+      spriteMaterial: any;
+      points: any;
+      pointsMaterial: any;
+      bufferGeometry: any;
+      bufferAttribute: any;
+      [elemName: string]: any;
+    }
   }
 }
