@@ -87,21 +87,23 @@ export const TreeSnowMaterial: React.FC<TreeSnowMaterialProps> = ({ color, snowA
       vPos = worldPos;
       vWorldNormal = worldNorm;
 
-      // Noise for natural distribution
-      float noise = snoise(worldPos * 3.0); 
+      // NOISE SCALE REDUCED: 0.6 (Was 3.0)
+      // This creates larger, fluffier "drifts" instead of static noise.
+      float noise = snoise(worldPos * 0.6); 
       float upDot = dot(worldNorm, vec3(0.0, 1.0, 0.0));
       
-      // Calculate snow presence (Vertex Level for Displacement)
-      // Bias upward facing normals
-      float snowThreshold = 0.3; 
-      float snowMask = smoothstep(snowThreshold, 1.0, upDot + noise * 0.2);
+      // THRESHOLD: STRICTER UP-FACING
+      // Only allow snow if surface points significantly up (> 0.6)
+      // Added noise has large amplitude (0.4) to create variations.
+      float snowThreshold = 0.6; 
+      float snowMask = smoothstep(snowThreshold, 1.0, upDot + noise * 0.4);
       
       vSnowFactor = snowMask;
 
-      // DISPLACEMENT: Push vertices out along normal if snow is present
-      // Only displace if we are reasonably sure it's snow (snowMask > 0.1)
-      if (snowMask > 0.01) {
-          float thickness = snowMask * 0.12; // Max thickness 0.12 units
+      // DISPLACEMENT
+      // Bulge out significant snow patches
+      if (snowMask > 0.1) {
+          float thickness = snowMask * 0.08; 
           transformed += normal * thickness;
       }
       `
@@ -123,34 +125,34 @@ export const TreeSnowMaterial: React.FC<TreeSnowMaterialProps> = ({ color, snowA
       `
       #include <dithering_fragment>
 
-      // Re-calculate noise for higher resolution detail in pixel shader
-      float detailNoise = snoise(vPos * 8.0);
+      // FRAGMENT NOISE: Matched lower frequency (1.5) for consistency with vertex shapes
+      // Added a second layer of tiny noise (10.0) for surface texture only
+      float shapeNoise = snoise(vPos * 1.5);
+      float textureNoise = snoise(vPos * 10.0);
       
-      // 1. Snow Coverage Logic (Recalculated from uniform for dynamic control)
+      // Snow Coverage Logic
       float upDot = dot(normalize(vWorldNormal), vec3(0.0, 1.0, 0.0));
       
-      // Adjustable threshold based on uSnowAmount (0 to 1)
-      float threshold = 1.0 - (uSnowAmount * 1.5);
+      // Adjustable threshold
+      float threshold = 1.0 - (uSnowAmount * 1.4);
       
-      // SHARPER TRANSITION: Reduced smoothstep range from 0.4 to 0.15
-      float coverage = smoothstep(threshold, threshold + 0.15, upDot + detailNoise * 0.1);
+      // SHARPER TRANSITION: 
+      // smoothstep range is tight (0.05) to create defined edges of snow clumps
+      float coverage = smoothstep(threshold, threshold + 0.05, upDot + shapeNoise * 0.3);
       
-      // Mix logic: Vertex displacement guided roughly, but fragment shader cleans up edges
       float finalSnowMix = max(coverage, vSnowFactor * uSnowAmount);
       
-      // 2. TEXTURE DETAIL
-      // Add subtle noise to white to avoid "flat paint" look
-      vec3 snowySurface = uSnowColor * (0.95 + 0.05 * detailNoise);
+      // TEXTURE: White snow with subtle grain
+      vec3 snowySurface = uSnowColor * (0.98 + 0.02 * textureNoise);
 
-      // 3. MICRO-SPARKLES (Glitter) - BOOSTED INTENSITY
+      // SPARKLES: High frequency glitter
       vec3 viewDir = normalize(cameraPosition - vPos);
       float sparkleNoise = snoise(vPos * 50.0 + viewDir * 5.0); 
-      // Higher multiplier (2.5) for brighter sparkles
-      float sparkles = smoothstep(0.7, 1.0, sparkleNoise) * 2.5; 
+      float sparkles = smoothstep(0.8, 1.0, sparkleNoise) * 2.0; 
       
       snowySurface += vec3(sparkles);
 
-      // Mix Base Color with Snow
+      // MIX: Use finalSnowMix to blend
       vec3 finalColor = mix(gl_FragColor.rgb, snowySurface, finalSnowMix);
 
       gl_FragColor = vec4(finalColor, gl_FragColor.a);

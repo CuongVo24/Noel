@@ -9,6 +9,7 @@ import { useGame } from '../../context/GameContext';
 import { useQuality } from '../../hooks/useQuality';
 import { audioManager } from '../../utils/audio';
 import { DecorationType, Decoration } from '../../types';
+import { getSnowHeight } from '../../utils/snowMath';
 
 // Components
 import { ChristmasTree } from '../Tree';
@@ -19,6 +20,7 @@ import { Campfire } from '../Campfire';
 import { WillOTheWisp } from '../WillOTheWisp';
 import { Fireworks } from '../Fireworks';
 import { SantaAirdrop } from '../SantaAirdrop';
+import { SolarSystem } from '../SolarSystem';
 
 // --- MEMOIZED COMPONENTS ---
 const MemoizedTree = memo(ChristmasTree);
@@ -29,27 +31,31 @@ const MemoizedGifts = memo(Gifts);
 const SceneLighting = ({ isLit, shadowsEnabled }: { isLit: boolean, shadowsEnabled: boolean }) => {
     return (
         <>
-            <ambientLight intensity={isLit ? 0.3 : 0.02} color="#ccddff" />
+            <ambientLight intensity={isLit ? 0.4 : 0.05} color="#ccddff" />
             
-            {/* Ambient ground reflection - helps the snow look grounded, not floating in black void */}
-            <hemisphereLight 
-                args={['#202040', '#050505', isLit ? 0.4 : 0.1]} 
+            {/* 
+               The SUN Light - Positioned to match the SolarSystem visual Sun [50, 20, 50].
+               Increased map size for sharper shadows over large distances.
+            */}
+            <directionalLight 
+                position={[50, 20, 50]} 
+                intensity={isLit ? 1.5 : 0.1} 
+                castShadow={shadowsEnabled} 
+                shadow-mapSize={[2048, 2048]}
+                shadow-camera-left={-20}
+                shadow-camera-right={20}
+                shadow-camera-top={20}
+                shadow-camera-bottom={-20}
+                color="#ffeedd"
             />
 
-            <directionalLight 
-                position={[10, 20, 10]} 
-                intensity={isLit ? 0.9 : 0.05} 
-                castShadow={shadowsEnabled} 
-                shadow-mapSize={[1024, 1024]}
-                color="#aaddff"
-            />
+            {/* Rim light for cinematic edge highlighting */}
             <spotLight 
-                position={[0, 10, 0]} 
+                position={[-20, 10, -20]} 
                 angle={0.5} 
                 penumbra={1} 
-                intensity={isLit ? 1 : 0} 
-                castShadow={shadowsEnabled}
-                color="#ffaa44"
+                intensity={isLit ? 0.5 : 0} 
+                color="#4455ff"
             />
         </>
     );
@@ -213,9 +219,12 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
     dispatch({ type: 'ADD_DECORATIONS_BATCH', payload: newItems });
   };
 
-  // CLAMP SHAKE INTENSITY TO PREVENT ARTIFACTS
-  // CameraShake behaves erratically with intensity > 2.0 or 3.0
   const safeHeatWave = Math.min(heatWaveIntensity, 2.0);
+
+  // Calculate Campfire positions with gravity
+  const cf1 = useMemo(() => [4, getSnowHeight(4, 2), 2] as [number, number, number], []);
+  const cf2 = useMemo(() => [-3, getSnowHeight(-3, 3), 3] as [number, number, number], []);
+  const cf3 = useMemo(() => [0, getSnowHeight(0, -5), -5] as [number, number, number], []);
 
   return (
     <div 
@@ -264,6 +273,12 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
             <SceneLighting isLit={state.isLit} shadowsEnabled={quality.shadowsEnabled} />
 
             <Suspense fallback={null}>
+                {/* 
+                    Stylized Solar System Background 
+                    Renders planets and stars outside the globe
+                */}
+                <SolarSystem />
+
                 <MemoizedGlobe isNight={true} shakeIntensity={shakeIntensity} />
                 
                 <MemoizedTree 
@@ -288,12 +303,10 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
                     />
                 )}
 
-                {/* Static Environment Objects */}
-                <Campfire position={[4, 0, 2]} flareTrigger={globalFlareTrigger} />
-                <Campfire position={[-3, 0, 3]} flareTrigger={globalFlareTrigger} />
-                <Campfire position={[0, 0, -5]} flareTrigger={globalFlareTrigger} />
+                <Campfire position={cf1} flareTrigger={globalFlareTrigger} />
+                <Campfire position={cf2} flareTrigger={globalFlareTrigger} />
+                <Campfire position={cf3} flareTrigger={globalFlareTrigger} />
 
-                {/* Restored Wisps Count (18 on High, 8 on Low) */}
                 <WispField count={quality.tier === 'HIGH' ? 18 : 8} />
 
                 <MemoizedGifts onOpen={onGiftOpen} />
@@ -301,7 +314,6 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
                 <SimulatedUsers />
             </Suspense>
 
-            {/* Effects - Disabled on Low Tier for Performance */}
             {quality.effectsEnabled && (
                 <EffectComposer enableNormalPass={false}>
                     <Bloom 

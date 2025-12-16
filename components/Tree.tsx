@@ -1,7 +1,6 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { TreeSnowMaterial } from './TreeShaderMaterial';
 import { Decoration } from '../types';
 import { DecorationMesh } from './DecorationMeshes';
 
@@ -11,16 +10,107 @@ interface TreeProps {
   decorations: Decoration[];
   isLit: boolean;
   onStarClick: (position: THREE.Vector3) => void;
-  superNovaTrigger?: number; // Timestamp of last trigger
+  superNovaTrigger?: number; 
 }
 
+// --- GEOMETRY-BASED SNOW CAP ---
+// Creates a physical snow layer on top of the tree cone
+const TreeSnowCap = ({ args, scale, snowAmount }: { args: [number, number, number], scale: number, snowAmount: number }) => {
+    // args = [radius, height, segments]
+    // We want the snow to only cover the top ~40-50% (shoulders) of the cone.
+    
+    // 1. Calculate dimensions for a "Cap" cone
+    // If we cut the main cone at 50% height, the radius at that point is 50%.
+    // We create a new cone that represents this top half.
+    const originalHeight = args[1];
+    const originalRadius = args[0];
+    
+    const capHeight = originalHeight * 0.55; // Slightly more than half to overlap well
+    const capRadius = originalRadius * 0.55; // Match slope scale
+    
+    const geometry = useMemo(() => {
+        // Create the smaller cap cone
+        // Scale radius x1.15 to make it thick and sit "on top" rather than inside
+        const geo = new THREE.ConeGeometry(capRadius * 1.15, capHeight, args[2] * 2);
+        
+        const posAttribute = geo.attributes.position;
+        const vertex = new THREE.Vector3();
+        
+        // NOISE SEEDS
+        const noiseFreq = 3.5;
+        const dripFreq = 9.0;
+
+        for (let i = 0; i < posAttribute.count; i++) {
+            vertex.fromBufferAttribute(posAttribute, i);
+            
+            const y = vertex.y; // Local Y. Center=0. Range: [-capHeight/2, capHeight/2]
+            const angle = Math.atan2(vertex.z, vertex.x);
+
+            // 1. General Lumpy Noise (Thickness)
+            const lump = Math.sin(vertex.x * noiseFreq) * Math.cos(vertex.z * noiseFreq);
+            // Push outward along normal (approximation: just radial push)
+            const push = 0.08 + (lump * 0.03);
+
+            vertex.x += vertex.x * push;
+            vertex.z += vertex.z * push;
+
+            // 2. Bottom Edge Dripping (Jaggedness)
+            // Determine where the bottom of this cap is
+            const bottomThreshold = -capHeight * 0.35;
+            
+            if (y < bottomThreshold) {
+                // Create sine wave drips at the edge
+                const drip = Math.sin(angle * dripFreq) * 0.12;
+                const noise = Math.sin(angle * 25.0) * 0.04;
+                
+                // Pull vertices down to create the drip over the green
+                vertex.y += (drip + noise);
+            }
+
+            posAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
+        }
+        
+        geo.computeVertexNormals();
+        return geo;
+    }, [capRadius, capHeight, args]);
+
+    if (snowAmount <= 0.1) return null;
+
+    // POSITIONING:
+    // Green Cone (Height H): Center @ 0. Top @ +H/2.
+    // Cap Cone (Height h): Center @ 0. Top @ +h/2.
+    // We want CapTop to match GreenTop.
+    // OffsetY + h/2 = H/2  =>  OffsetY = (H - h) / 2
+    const yOffset = (originalHeight - capHeight) / 2;
+
+    return (
+        <mesh position={[0, yOffset, 0]} geometry={geometry} scale={scale}>
+             <meshPhysicalMaterial 
+                color="#f8fafd" 
+                roughness={0.7} 
+                metalness={0.1}
+                clearcoat={0.5}
+                clearcoatRoughness={0.2}
+            />
+        </mesh>
+    );
+};
+
 const TreeLayer = ({ position, scale, snowAmount }: { position: [number, number, number], scale: number, snowAmount: number }) => {
+  // Base Cone Args: Radius, Height, Segments
+  const CONE_ARGS: [number, number, number] = [1.5, 2.5, 32];
+
   return (
-    <mesh position={position} scale={scale} castShadow receiveShadow>
-      <coneGeometry args={[1.5, 2.5, 32]} />
-      {/* Replaced custom element with helper component */}
-      <TreeSnowMaterial color="#2d5a27" snowAmount={snowAmount} />
-    </mesh>
+    <group position={position} scale={scale}>
+      {/* 1. Green Foliage Layer */}
+      <mesh castShadow receiveShadow>
+        <coneGeometry args={CONE_ARGS} />
+        <meshStandardMaterial color="#2d5a27" roughness={0.8} />
+      </mesh>
+
+      {/* 2. Physical Snow Cap Layer (Shoulders Only) */}
+      <TreeSnowCap args={CONE_ARGS} scale={1.0} snowAmount={snowAmount} />
+    </group>
   );
 };
 
@@ -49,7 +139,6 @@ export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart
     return new THREE.CanvasTexture(canvas);
   }, []);
 
-  // OPTIMIZATION: Fix Memory Leak - Dispose Texture
   useEffect(() => {
     return () => {
         glowTexture.dispose();
@@ -65,7 +154,7 @@ export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart
          starRef.current.scale.setScalar(1 + Math.sin(time * 2) * 0.05);
     }
 
-    // SUPER NOVA LIGHT LOGIC (Environmental Light)
+    // SUPER NOVA LIGHT LOGIC
     if (starLightRef.current) {
         const age = (now - superNovaTrigger) / 1000;
         const LIGHT_DURATION = 2.5;
@@ -150,6 +239,7 @@ export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart
         onPointerMove={handlePointerMove}
         onPointerOut={handlePointerOut}
       >
+        {/* Layered Cones with Geometry Snow */}
         <TreeLayer position={[0, 1.5, 0]} scale={1.2} snowAmount={snowAmount} />
         <TreeLayer position={[0, 2.5, 0]} scale={1.0} snowAmount={snowAmount} />
         <TreeLayer position={[0, 3.5, 0]} scale={0.8} snowAmount={snowAmount} />
