@@ -151,21 +151,39 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
 
   const [initialRotation] = useState(() => [0, Math.random() * Math.PI, 0] as [number, number, number]);
 
+  // Memoize Material for Performance and Animation access
+  const boxMat = useMemo(() => new THREE.MeshStandardMaterial({
+      color: gift.color,
+      roughness: 0.6,
+      emissive: gift.color,
+      emissiveIntensity: 0, // Starts at 0
+  }), [gift.color]);
+
   // Combined Animation Loop
   useFrame((state, delta) => {
     const t = state.clock.getElapsedTime();
 
-    // 1. Loading Vibration Effect
+    // 1. Loading "Anticipation Shake" Effect
     if (loading && groupRef.current) {
-       // Fast jitter to indicate "something is happening"
-       groupRef.current.rotation.z = Math.sin(t * 40) * 0.03;
-       groupRef.current.rotation.x = Math.cos(t * 35) * 0.03;
-       groupRef.current.scale.setScalar(1 + Math.sin(t * 10) * 0.02);
+       // Vigorous shaking logic
+       // High frequency (50) for rapid vibration
+       // Amplitude (0.05) for visible shake
+       groupRef.current.rotation.z = Math.sin(t * 50) * 0.05;
+       groupRef.current.rotation.x = Math.cos(t * 45) * 0.05;
+       
+       // Squash/Stretch slightly
+       groupRef.current.scale.setScalar(1 + Math.sin(t * 20) * 0.03);
+
+       // Pulse Emissive Intensity to show energy building
+       boxMat.emissiveIntensity = 0.8 + Math.sin(t * 15) * 0.4;
     } else if (groupRef.current) {
-        // Reset transform when not loading
-        groupRef.current.rotation.z = 0;
-        groupRef.current.rotation.x = 0;
-        groupRef.current.scale.setScalar(1);
+        // Smoothly reset transform when not loading
+        groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, 0, delta * 10);
+        groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, 0, delta * 10);
+        groupRef.current.scale.lerp(new THREE.Vector3(1, 1, 1), delta * 10);
+
+        // Reset Emissive Intensity
+        boxMat.emissiveIntensity = THREE.MathUtils.lerp(boxMat.emissiveIntensity, 0, delta * 5);
     }
 
     // 2. Opening Animation
@@ -246,7 +264,8 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
 
     // Start Loading Sequence
     setLoading(true);
-    audioManager.playSleighBells(); // Sound clue
+    // Trigger Rattle Sound (Existing function works well for a shake start)
+    audioManager.playSleighBells(); 
 
     // Fetch Unique Wish from Gemini
     let finalMessage = gift.message; // Default fallback
@@ -265,11 +284,6 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
     onOpen(finalMessage);
     audioManager.playChime();
   };
-
-  const boxMat = new THREE.MeshStandardMaterial({
-      color: gift.color,
-      roughness: 0.6,
-  });
 
   return (
     <group position={gift.position} rotation={initialRotation}>
