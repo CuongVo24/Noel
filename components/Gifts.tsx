@@ -8,18 +8,18 @@ import { getSnowHeight } from '../utils/snowMath';
 import { generateGenZWish } from '../utils/gemini';
 import { audioManager } from '../utils/audio';
 
-// Static mock gifts with Gen Z Vietnamese Slang
+// Static mock gifts with Natural Vietnamese Jokes (Sarcastic & Funny)
 const STATIC_GIFTS_DATA: Gift[] = [
-    { id: 'g1', position: [1.5, 0, 1.5], color: '#d32f2f', message: 'Noel này tuy lạnh nhưng không bằng trái tim crush lạnh lùng với tui 🥶. Chúc bạn sớm thoát kiếp F.A!', sender: 'Hội Người Cũ', opened: false },
-    { id: 'g2', position: [-1.2, 0, 1], color: '#1976d2', message: 'Chúc đằng ấy Giáng Sinh slay ngất ngây, tiền về đầy túi, tình đầy tim! 10 điểm không có nhưng! 💅✨', sender: 'Bestie', opened: false },
-    { id: 'g3', position: [0.5, 0, -1.5], color: '#388e3c', message: 'Cầu mong năm mới không deadline, chỉ có headline là "Trúng số độc đắc" 🤑. Gét gô!', sender: 'Vũ trụ', opened: false },
-    { id: 'g4', position: [2.5, 0, 0.5], color: '#ffeb3b', message: 'Flex nhẹ cái giáng sinh ấm áp. Chúc bạn visual thăng hạng, tài khoản thêm nhiều số 0! 👌', sender: 'Fan cứng', opened: false },
-    { id: 'g5', position: [-2, 0, -2], color: '#9c27b0', message: 'Noel vui vẻ không quạu, lì xì ting ting là hết sầu! Mãi keo lì tái châu nha! 🥂', sender: 'Hội chị em', opened: false },
-    { id: 'g6', position: [3, 0, -1], color: '#00bcd4', message: 'Đừng để Noel này giống Noel xưa, vẫn đi xe máy, vẫn chưa có bồ... à mà thôi chúc vui là chính! 🤣', sender: 'Người lạ', opened: false },
-    { id: 'g7', position: [-3.5, 0, 1.5], color: '#ff5722', message: 'Chúc bạn sang năm mới công việc "trôi" như người yêu cũ, tiền vào như nước sông Đà! 🌊', sender: 'Đồng nghiệp', opened: false },
-    { id: 'g8', position: [0, 0, 3], color: '#e91e63', message: 'Giáng sinh này, chúc bạn tìm được "chân ái" chứ không phải "chân gà" nha 🍗❤️. Yêu thương!', sender: 'Secret Santa', opened: false },
-    { id: 'g9', position: [-1.5, 0, 2.5], color: '#795548', message: 'Hết nước chấm! Chúc mừng Giáng Sinh! Ai có đôi thì hạnh phúc, ai cô đơn thì... rủ tui đi nhậu! 🍻', sender: 'Bợm nhậu', opened: false },
-    { id: 'g10', position: [2, 0, 2.5], color: '#607d8b', message: 'Tầm này thì còn liêm sỉ gì nữa, chúc bạn mau giàu ú ụ để bao tui đi ăn! Chốt đơn! 🔨', sender: 'Đứa bạn thân', opened: false },
+    { id: 'g1', position: [1.5, 0, 1.5], color: '#d32f2f', message: 'Đừng để cái lạnh của mùa đông đánh lừa rằng bạn cần người yêu. Thứ bạn cần là Tiền! 💸', sender: 'Sự thật mất lòng', opened: false },
+    { id: 'g2', position: [-1.2, 0, 1], color: '#1976d2', message: 'Noel này vẫn giống Noel xưa. Vẫn đi xe máy... vẫn chưa có bồ. Cay! 🌶️', sender: 'Hội người ế', opened: false },
+    { id: 'g3', position: [0.5, 0, -1.5], color: '#388e3c', message: 'Thông báo: Tuyển người yêu đi chơi Noel. Yêu cầu: Còn thở là được. Gấp lắm rồi! 🆘', sender: 'Tuyển dụng', opened: false },
+    { id: 'g4', position: [2.5, 0, 0.5], color: '#ffeb3b', message: 'Chúc bạn Noel vui vẻ! Nếu không vui thì... thôi, sang năm vui bù vậy. 🤣', sender: 'Bạn thân', opened: false },
+    { id: 'g5', position: [-2, 0, -2], color: '#9c27b0', message: 'Gương kia ngự ở trên tường. Noel ai sẽ ra đường cùng ta? Gương cười gương bảo: Ở nhà cho xong! 🪞', sender: 'Cổ tích', opened: false },
+    { id: 'g6', position: [3, 0, -1], color: '#00bcd4', message: 'Giáng sinh là dịp để quây quần bên gia đình. Nên là... ai rủ đi chơi nhớ bao tui ăn nhé! 🍗', sender: 'Thực thần', opened: false },
+    { id: 'g7', position: [-3.5, 0, 1.5], color: '#ff5722', message: 'Quyết tâm Noel không tiêu tiền! Để dành tiền tiêu Tết (mà Tết cũng chả có tiền đâu) 🥲', sender: 'Ví rỗng', opened: false },
+    { id: 'g8', position: [0, 0, 3], color: '#e91e63', message: 'Trời lạnh quá, ước gì có ai ôm... một đống tiền ném vào mặt mình nhỉ? 😍', sender: 'Mộng mơ', opened: false },
+    { id: 'g9', position: [-1.5, 0, 2.5], color: '#795548', message: 'Chúc mừng bạn đã quay vào ô "Mất lượt". Năm nay vẫn ế tiếp nhé! Xin chia buồn. 🎲', sender: 'Định mệnh', opened: false },
+    { id: 'g10', position: [2, 0, 2.5], color: '#607d8b', message: 'Thôi đừng buồn vì Noel ế. Vì bình thường bạn cũng có người yêu đâu? Tỉnh táo lên! 🧠', sender: 'Gáo nước lạnh', opened: false },
 ];
 
 // --- 1. ORGANIC SNOW CAP (Soft Pillow Style) ---

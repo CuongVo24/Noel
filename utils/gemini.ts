@@ -9,10 +9,10 @@ export const generateGenZWish = async (): Promise<string> => {
     // Use gemini-2.5-flash for basic text tasks
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: "Bạn là một Gen Z Việt Nam hài hước, 'xéo xắt' nhưng đáng yêu. Hãy viết 1 câu chúc Giáng Sinh ngắn gọn (dưới 25 từ) cho bạn bè. Dùng slang như 'keo lỳ', 'chốt đơn', 'xu cà na', '10 điểm'. Không dùng văn mẫu.",
+      contents: "Đóng vai một người bạn thân cực kỳ lầy lội, phũ mồm nhưng hài hước. Hãy viết 1 câu troll (trêu chọc) ngắn gọn về Giáng Sinh (dưới 25 từ). Chủ đề: Đòi quà, than nghèo, trêu ế, bóc phốt. Tuyệt đối KHÔNG dùng văn mẫu sến súa. KHÔNG dùng từ ngữ gượng gạo kiểu 'keo lỳ', 'tái châu'. Ví dụ: 'Lớn đầu rồi đừng đòi quà nữa', 'Tầm này liêm sỉ gì nữa', 'Alo mẹ à, con không về đâu'.",
     });
     
-    return response.text || "Giáng sinh keo lỳ tái châu! 💅";
+    return response.text || "Giáng sinh vui vẻ, bớt ế đi má! 🌚";
   } catch (error) {
     console.error("Gemini API Error:", error);
     return "Noel vui vẻ không quạu! (Mạng lag rùi) 🎄";
