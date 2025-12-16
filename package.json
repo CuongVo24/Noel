@@ -18,7 +18,9 @@
     "@react-three/postprocessing": "^3.0.4",
     "uuid": "^13.0.0",
     "@react-spring/three": "^10.0.3",
-    "firebase": "^12.6.0"
+    "firebase": "^12.6.0",
+    "@google/generative-ai": "latest",
+    "@google/genai": "^1.33.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

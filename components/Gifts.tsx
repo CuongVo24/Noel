@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Gift } from '../types';
 import { getSnowHeight } from '../utils/snowMath';
+import { generateGenZWish } from '../utils/gemini';
+import { audioManager } from '../utils/audio';
 
 // Static mock gifts with Gen Z Vietnamese Slang
 const STATIC_GIFTS_DATA: Gift[] = [
@@ -125,6 +127,8 @@ interface GiftBoxProps {
 
 const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   const [active, setActive] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const groupRef = useRef<THREE.Group>(null);
   
   // CONSTANTS
   const SIZE = 0.5;
@@ -132,7 +136,23 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   const HALF = SIZE / 2;
   const LID_H = 0.05; 
 
-  const [rotation] = useState(() => [0, Math.random() * Math.PI, 0] as [number, number, number]);
+  const [initialRotation] = useState(() => [0, Math.random() * Math.PI, 0] as [number, number, number]);
+
+  // Loading Vibration Effect
+  useFrame((state) => {
+    if (loading && groupRef.current) {
+       // Fast jitter to indicate "something is happening"
+       const t = state.clock.getElapsedTime();
+       groupRef.current.rotation.z = Math.sin(t * 40) * 0.03;
+       groupRef.current.rotation.x = Math.cos(t * 35) * 0.03;
+       groupRef.current.scale.setScalar(1 + Math.sin(t * 10) * 0.02);
+    } else if (groupRef.current) {
+        // Reset transform when not loading
+        groupRef.current.rotation.z = 0;
+        groupRef.current.rotation.x = 0;
+        groupRef.current.scale.setScalar(1);
+    }
+  });
 
   // --- GEOMETRIES ---
 
@@ -189,10 +209,37 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
     config: { tension: 200, friction: 20 }
   });
 
-  const handleClick = (e: any) => {
+  const handleClick = async (e: any) => {
     e.stopPropagation();
-    setActive(!active);
-    if (!active) onOpen(gift.message);
+    
+    // If already open, just re-show the message (no AI call)
+    if (active) {
+        onOpen(gift.message); // Fallback to current message state?
+        return;
+    }
+
+    if (loading) return;
+
+    // Start Loading Sequence
+    setLoading(true);
+    audioManager.playSleighBells(); // Sound clue
+
+    // Fetch Unique Wish from Gemini
+    let finalMessage = gift.message; // Default fallback
+    try {
+        const genZWish = await generateGenZWish();
+        if (genZWish) {
+            finalMessage = genZWish;
+        }
+    } catch (err) {
+        console.warn("Using fallback wish due to error.");
+    }
+
+    // Finish Loading
+    setLoading(false);
+    setActive(true);
+    onOpen(finalMessage);
+    audioManager.playChime();
   };
 
   const boxMat = new THREE.MeshStandardMaterial({
@@ -201,52 +248,53 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   });
 
   return (
-    <group position={gift.position} rotation={rotation} onClick={handleClick}>
-      
-      {/* --- 1. MAIN BOX BODY --- */}
-      <group position={[0, HALF, 0]}>
-         {/* Container */}
-         <mesh geometry={bodyGeo} material={boxMat} castShadow receiveShadow />
-         
-         {/* MAGICAL CONTENT INSIDE */}
-         <GiftContent color={gift.color} active={active} />
-         
-         {/* INTERNAL LIGHTING */}
-         <animated.pointLight 
-            color={gift.color} 
-            intensity={lightIntensity} 
-            distance={2} 
-            decay={2} 
-            position={[0, 0.2, 0]}
-         />
+    <group position={gift.position} rotation={initialRotation}>
+      <group ref={groupRef} onClick={handleClick}>
+        {/* --- 1. MAIN BOX BODY --- */}
+        <group position={[0, HALF, 0]}>
+            {/* Container */}
+            <mesh geometry={bodyGeo} material={boxMat} castShadow receiveShadow />
+            
+            {/* MAGICAL CONTENT INSIDE */}
+            <GiftContent color={gift.color} active={active} />
+            
+            {/* INTERNAL LIGHTING */}
+            <animated.pointLight 
+                color={gift.color} 
+                intensity={lightIntensity} 
+                distance={2} 
+                decay={2} 
+                position={[0, 0.2, 0]}
+            />
+        </group>
+
+        {/* --- 2. ANIMATED LID GROUP --- */}
+        {/* Pivot point at the top-back edge of the box */}
+        {/* @ts-ignore */}
+        <animated.group position={[0, SIZE, -HALF]} rotation-x={lidRot}>
+            {/* Shift back to center relative to pivot */}
+            <group position={[0, 0, HALF]}>
+                
+                {/* A. The Lid Rims (Sides) */}
+                <mesh position={[0, LID_H/2, 0]} geometry={lidRimGeo} material={boxMat} castShadow receiveShadow />
+
+                {/* B. The Lid Top Plate (SOLID Box) */}
+                {/* Sits ON TOP of the rims. */}
+                <mesh position={[0, LID_H + WALL/2, 0]} castShadow receiveShadow>
+                    <boxGeometry args={[SIZE, WALL, SIZE]} />
+                    <primitive object={boxMat} />
+                </mesh>
+
+                {/* D. The Snow Cap - Sits directly on top of the lid plate */}
+                {/* Total Y = LID_H + WALL + epsilon */}
+                <group position={[0, LID_H + WALL + 0.002, 0]}>
+                    <OrganicSnowCap size={SIZE * 0.95} /> 
+                    {/* Scaled slightly down to not overhang the box edge strangely */}
+                </group>
+
+            </group>
+        </animated.group>
       </group>
-
-      {/* --- 2. ANIMATED LID GROUP --- */}
-      {/* Pivot point at the top-back edge of the box */}
-      {/* @ts-ignore */}
-      <animated.group position={[0, SIZE, -HALF]} rotation-x={lidRot}>
-          {/* Shift back to center relative to pivot */}
-          <group position={[0, 0, HALF]}>
-             
-             {/* A. The Lid Rims (Sides) */}
-             <mesh position={[0, LID_H/2, 0]} geometry={lidRimGeo} material={boxMat} castShadow receiveShadow />
-
-             {/* B. The Lid Top Plate (SOLID Box) */}
-             {/* Sits ON TOP of the rims. */}
-             <mesh position={[0, LID_H + WALL/2, 0]} castShadow receiveShadow>
-                 <boxGeometry args={[SIZE, WALL, SIZE]} />
-                 <primitive object={boxMat} />
-             </mesh>
-
-             {/* D. The Snow Cap - Sits directly on top of the lid plate */}
-             {/* Total Y = LID_H + WALL + epsilon */}
-             <group position={[0, LID_H + WALL + 0.002, 0]}>
-                 <OrganicSnowCap size={SIZE * 0.95} /> 
-                 {/* Scaled slightly down to not overhang the box edge strangely */}
-             </group>
-
-          </group>
-      </animated.group>
 
       {/* Shadow Decal on Floor */}
       <mesh position={[0, 0.01, 0]} rotation={[-Math.PI/2, 0, 0]}>
@@ -265,7 +313,8 @@ export const Gifts: React.FC<{ onOpen: (msg: string) => void }> = ({ onOpen }) =
             ...g,
             position: [
                 g.position[0],
-                getSnowHeight(g.position[0], g.position[2]),
+                // SINK OFFSET: -0.15 to bury it in snow to appear heavy
+                getSnowHeight(g.position[0], g.position[2]) - 0.15,
                 g.position[2]
             ] as [number, number, number]
         }));

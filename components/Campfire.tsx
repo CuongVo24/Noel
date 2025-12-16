@@ -45,6 +45,7 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
   const quality = useQuality();
   const fireGroupRef = useRef<THREE.Group>(null);
   const particlesRef = useRef<THREE.Points>(null);
+  const mainLightRef = useRef<THREE.PointLight>(null); // Ref for main shimmering light
   const lastTriggerRef = useRef(0);
   
   const [flaring, setFlaring] = useState(false);
@@ -115,7 +116,7 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
   useFrame((state, delta) => {
     const time = state.clock.getElapsedTime();
 
-    // Idle animation
+    // Idle animation for cones
     if (fireGroupRef.current) {
       const len = fireGroupRef.current.children.length;
       for (let i = 0; i < len; i++) {
@@ -123,6 +124,16 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
          child.scale.y = 1 + Math.sin(time * 6 + i * 2) * 0.3;
          child.rotation.z = Math.sin(time * 3 + i) * 0.1;
       }
+    }
+
+    // MAIN LIGHT SHIMMER (Magical & Bright)
+    if (mainLightRef.current) {
+        // High frequency jitter + slower pulse
+        const shimmer = Math.sin(time * 25) * 0.5 + Math.random() * 0.5;
+        const breath = Math.sin(time * 2) * 0.5;
+        
+        mainLightRef.current.intensity = 6.0 + shimmer + breath;
+        mainLightRef.current.distance = 9.0 + breath;
     }
 
     if (flaring) {
@@ -272,8 +283,15 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
             toneMapped={false}
          />
       </points>
-
-      <pointLight color="#ff6f00" intensity={1.5} distance={6} decay={2} />
+      
+      {/* UPDATED MAIN LIGHT: Shimmering and Brighter */}
+      <pointLight 
+        ref={mainLightRef} 
+        color="#ff6f00" 
+        intensity={6.0} 
+        distance={9} 
+        decay={2} 
+      />
     </group>
   );
 };

@@ -1,0 +1,1 @@
+// VITE_GEMINI_API_KEY=AIzaSyAWeyOQvMhXHVwJ3xsrxh5q8zSrg8x_rEU

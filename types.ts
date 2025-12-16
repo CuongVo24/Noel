@@ -37,38 +37,20 @@ export interface CeremonyState {
   target: number;
 }
 
+// Robustly augment JSX.IntrinsicElements for React Three Fiber
+// This ensures all Three.js elements (mesh, group, etc.) are recognized by TypeScript
 declare global {
   namespace JSX {
     interface IntrinsicElements {
-      mesh: any;
-      group: any;
-      coneGeometry: any;
-      cylinderGeometry: any;
-      meshStandardMaterial: any;
-      meshBasicMaterial: any;
-      meshPhysicalMaterial: any;
-      sphereGeometry: any;
-      pointLight: any;
-      ambientLight: any;
-      spotLight: any;
-      hemisphereLight: any;
-      directionalLight: any;
-      primitive: any;
-      planeGeometry: any;
-      torusGeometry: any;
-      boxGeometry: any;
-      capsuleGeometry: any;
-      octahedronGeometry: any;
-      circleGeometry: any;
-      ringGeometry: any;
-      sprite: any;
-      spriteMaterial: any;
-      points: any;
-      pointsMaterial: any;
-      bufferGeometry: any;
-      bufferAttribute: any;
-      instancedMesh: any;
-      shaderMaterial: any;
+      [elemName: string]: any;
+    }
+  }
+}
+
+// Additional augmentation for setups where JSX is namespaced under React
+declare module 'react' {
+  namespace JSX {
+    interface IntrinsicElements {
       [elemName: string]: any;
     }
   }
