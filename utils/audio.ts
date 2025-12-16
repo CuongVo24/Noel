@@ -136,28 +136,95 @@ class AudioManager {
   }
 
   playFireWhoosh() {
-    if (!this.ctx || this.isMuted) return;
+    // Reusing existing function for generic fire sounds, or can be used for fast combustion
+    this.playFireFlare(); 
+  }
 
-    // Create noise buffer
-    const bufferSize = this.ctx.sampleRate * 0.5; // 0.5 seconds
+  // --- NEW INTERACTIVE SOUNDS ---
+
+  playFireFlare() {
+    if (!this.ctx || this.isMuted) return;
+    // Deep, loud crackle
+    const bufferSize = this.ctx.sampleRate * 1.0; 
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1);
+        data[i] = (Math.random() * 2 - 1);
     }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+    
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(100, this.ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.1);
+    filter.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 1.0);
 
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.8, this.ctx.currentTime + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.8);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain!);
+    noise.start();
+  }
+
+  playSantaLaugh() {
+    if (!this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    
+    // "Ho Ho Ho" - Three bursts of low harmonic sound
+    [0, 0.4, 0.8].forEach((timeOffset) => {
+        const osc = this.ctx!.createOscillator();
+        const osc2 = this.ctx!.createOscillator(); // Sub-harmonic
+        const gain = this.ctx!.createGain();
+        
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, now + timeOffset);
+        osc.frequency.linearRampToValueAtTime(120, now + timeOffset + 0.2); // Pitch drop
+        
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(75, now + timeOffset);
+
+        gain.gain.setValueAtTime(0, now + timeOffset);
+        gain.gain.linearRampToValueAtTime(0.3, now + timeOffset + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + timeOffset + 0.3);
+
+        osc.connect(gain);
+        osc2.connect(gain);
+        gain.connect(this.masterGain!);
+        
+        osc.start(now + timeOffset);
+        osc.stop(now + timeOffset + 0.3);
+        osc2.start(now + timeOffset);
+        osc2.stop(now + timeOffset + 0.3);
+    });
+  }
+
+  playMeteorWhoosh() {
+    if (!this.ctx || this.isMuted) return;
+    // High-pass filter sweep
+    const bufferSize = this.ctx.sampleRate * 1.5;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * 0.5;
+    }
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
 
     const filter = this.ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(200, this.ctx.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(2000, this.ctx.currentTime + 0.3);
+    filter.type = 'bandpass';
+    filter.Q.value = 1.0;
+    filter.frequency.setValueAtTime(800, this.ctx.currentTime);
+    filter.frequency.linearRampToValueAtTime(100, this.ctx.currentTime + 1.2);
 
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.8, this.ctx.currentTime + 0.1);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+    gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 0.3);
+    gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.2);
 
     noise.connect(filter);
     filter.connect(gain);

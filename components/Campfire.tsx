@@ -45,14 +45,16 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
   const quality = useQuality();
   const fireGroupRef = useRef<THREE.Group>(null);
   const particlesRef = useRef<THREE.Points>(null);
-  const mainLightRef = useRef<THREE.PointLight>(null); // Ref for main shimmering light
+  const mainLightRef = useRef<THREE.PointLight>(null); 
   const lastTriggerRef = useRef(0);
+  
+  // Interactive Flare Logic
+  const flareIntensityRef = useRef(1.0); // Base intensity multiplier
   
   const [flaring, setFlaring] = useState(false);
   const [flareStartTime, setFlareStartTime] = useState(0);
 
   // OPTIMIZATION: Particle Count Cap
-  // Lowered slightly to prevent "explosion" feel while maintaining visual density
   const particleCount = quality.tier === 'HIGH' ? 60 : 25;
 
   // UseMemo for stable buffer initialization
@@ -76,8 +78,10 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
 
       setFlaring(true);
       setFlareStartTime(now);
-      // Only play audio if not spamming too hard is handled by parent, but nice to be safe
-      audioManager.playFireWhoosh();
+      
+      // Set visual intensity high for manual interaction
+      flareIntensityRef.current = 4.0;
+      audioManager.playFireFlare();
 
       // Reset particles for the new flare
       if (particlesRef.current) {
@@ -116,12 +120,16 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
   useFrame((state, delta) => {
     const time = state.clock.getElapsedTime();
 
+    // SMOOTH LERP INTENSITY BACK TO BASE
+    flareIntensityRef.current = THREE.MathUtils.lerp(flareIntensityRef.current, 1.0, delta * 3.0);
+
     // Idle animation for cones
     if (fireGroupRef.current) {
       const len = fireGroupRef.current.children.length;
       for (let i = 0; i < len; i++) {
          const child = fireGroupRef.current.children[i];
-         child.scale.y = 1 + Math.sin(time * 6 + i * 2) * 0.3;
+         const scaleBoost = flareIntensityRef.current * 0.5; // Scale up with flare
+         child.scale.y = 1 + Math.sin(time * 6 + i * 2) * 0.3 + (scaleBoost * 0.5);
          child.rotation.z = Math.sin(time * 3 + i) * 0.1;
       }
     }
@@ -132,8 +140,10 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
         const shimmer = Math.sin(time * 25) * 0.5 + Math.random() * 0.5;
         const breath = Math.sin(time * 2) * 0.5;
         
-        mainLightRef.current.intensity = 6.0 + shimmer + breath;
-        mainLightRef.current.distance = 9.0 + breath;
+        // Base Intensity (6.0) multiplied by current Interactive Flare Intensity
+        const baseIntensity = 6.0;
+        mainLightRef.current.intensity = (baseIntensity + shimmer + breath) * flareIntensityRef.current;
+        mainLightRef.current.distance = 9.0 + breath + (flareIntensityRef.current * 2);
     }
 
     if (flaring) {
@@ -177,9 +187,11 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
                         r = 5.0 * fade; g = 0.2 * fade; b = 0.0;
                     }
                     
-                    currentColors[i * 3] = r;
-                    currentColors[i * 3 + 1] = g;
-                    currentColors[i * 3 + 2] = b;
+                    // Boost color with flare intensity
+                    const boost = flareIntensityRef.current;
+                    currentColors[i * 3] = r * boost;
+                    currentColors[i * 3 + 1] = g * boost;
+                    currentColors[i * 3 + 2] = b * boost;
 
                     // Ground collision
                     if (positions[i * 3 + 1] < 0) {
@@ -254,11 +266,7 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
             <meshBasicMaterial color="#ff9800" toneMapped={false} />
          </mesh>
       </group>
-
-      {/* 
-         KEY ADDED HERE: Force re-mount of points if particleCount changes. 
-         This prevents WebGL buffer mismatch errors when switching Quality tiers.
-      */}
+      
       <points key={particleCount} ref={particlesRef} frustumCulled={false} renderOrder={1}>
          <bufferGeometry>
             <bufferAttribute 

@@ -1,5 +1,5 @@
-import React, { Suspense, useState, useRef, useEffect, memo, useMemo } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import React, { Suspense, useState, useRef, useEffect, memo, useMemo, useLayoutEffect } from 'react';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, CameraShake } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
@@ -32,6 +32,75 @@ import { ConfettiExplosion } from '../VFX/ConfettiExplosion'; // ADDED
 const MemoizedTree = memo(ChristmasTree);
 const MemoizedGlobe = memo(SnowGlobe);
 const MemoizedGifts = memo(Gifts);
+
+// --- METEOR COMPONENT ---
+interface MeteorProps {
+    startPos: THREE.Vector3;
+    endPos: THREE.Vector3;
+    onComplete: () => void;
+}
+
+const Meteor: React.FC<MeteorProps> = ({ startPos, endPos, onComplete }) => {
+    const meshRef = useRef<THREE.Mesh>(null);
+    const groupRef = useRef<THREE.Group>(null);
+    const progressRef = useRef(0);
+    const trailRef = useRef<THREE.Mesh>(null);
+
+    // Initial setup for Position and Rotation
+    useLayoutEffect(() => {
+        // Set initial position immediately to avoid flicker or prop conflict
+        if (meshRef.current) {
+            meshRef.current.position.copy(startPos);
+        }
+        
+        // Calculate orientation to look at end position
+        if (groupRef.current) {
+            const dummy = new THREE.Object3D();
+            dummy.position.copy(startPos);
+            dummy.lookAt(endPos);
+            // Adjust for cylinder default orientation (Y-up) to point forward (Z)
+            dummy.rotateX(-Math.PI / 2);
+            groupRef.current.quaternion.copy(dummy.quaternion);
+        }
+    }, [startPos, endPos]);
+
+    useFrame((state, delta) => {
+        progressRef.current += delta * 1.5; // Speed
+        
+        if (progressRef.current >= 1.0) {
+            onComplete();
+            return;
+        }
+
+        if (meshRef.current) {
+            meshRef.current.position.lerpVectors(startPos, endPos, progressRef.current);
+            // Spin
+            meshRef.current.rotation.z += 10 * delta;
+            
+            // Tail scaling logic
+            if (trailRef.current) {
+                const tailScale = 1.0 - progressRef.current; // Shrink as it goes
+                trailRef.current.scale.y = 5 + (tailScale * 5);
+            }
+        }
+    });
+
+    return (
+        <group ref={groupRef}>
+             {/* Note: DO NOT pass position prop here. We handle it in useLayoutEffect/useFrame to avoid read-only conflict */}
+             <mesh ref={meshRef}>
+                <sphereGeometry args={[0.3, 8, 8]} />
+                <meshBasicMaterial color="#ffffff" toneMapped={false} />
+                
+                {/* Tail */}
+                <mesh ref={trailRef} position={[0, -2, 0]}>
+                    <cylinderGeometry args={[0.02, 0.3, 8, 8]} />
+                    <meshBasicMaterial color="#ffffff" transparent opacity={0.4} />
+                </mesh>
+            </mesh>
+        </group>
+    );
+};
 
 // Helper for Scene Lighting
 const SceneLighting = ({ isLit, shadowsEnabled }: { isLit: boolean, shadowsEnabled: boolean }) => {
@@ -87,10 +156,6 @@ const DropRaycaster = ({
 
         if (intersects.length > 0) {
             // 3. Filter Logic
-            // We want to hit the Tree, but the SnowGlobe glass (radius 12) surrounds everything.
-            // Simple heuristic: If the hit distance is > 10, it's likely the sky/glass.
-            // The Tree is at [0,0,0] with radius ~2-3.
-            
             // Find first intersection that is reasonably close to center (The Tree)
             const validHit = intersects.find(hit => hit.distance < 8 && hit.object.type === 'Mesh');
 
@@ -198,6 +263,7 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
   
   // VFX State
   const [explosions, setExplosions] = useState<{ id: string, position: THREE.Vector3, color: string }[]>([]);
+  const [meteors, setMeteors] = useState<{ id: string, startPos: THREE.Vector3, endPos: THREE.Vector3 }[]>([]);
 
   // Drop State
   const [dropEvent, setDropEvent] = useState<{ x: number, y: number, type: DecorationType } | null>(null);
@@ -233,6 +299,10 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
       setExplosions(prev => prev.filter(e => e.id !== id));
   };
 
+  const removeMeteor = (id: string) => {
+      setMeteors(prev => prev.filter(m => m.id !== id));
+  };
+
   const handlePointerMove = (e: React.PointerEvent) => {
       const speed = Math.abs(e.movementX) + Math.abs(e.movementY);
       if (speed > 5) setShakeIntensity(prev => Math.min(1.5, prev + speed * 0.002));
@@ -241,6 +311,30 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
   const handleStarClick = (pos: THREE.Vector3) => {
     setFireworksPos(pos);
     audioManager.playFirework();
+  };
+
+  const handleBackgroundClick = (e: any) => {
+      e.stopPropagation();
+      // Only trigger if we click "far away" (the background)
+      if (e.distance > 100) {
+          audioManager.playMeteorWhoosh();
+          
+          const id = uuidv4();
+          // Generate random start and end points in the sky dome
+          const startX = (Math.random() - 0.5) * 200;
+          const startY = 50 + Math.random() * 50;
+          const startZ = -100; // Far back
+
+          const endX = startX + (Math.random() - 0.5) * 100;
+          const endY = startY - (30 + Math.random() * 20);
+          const endZ = startZ + (Math.random() - 0.5) * 50;
+
+          setMeteors(prev => [...prev, {
+              id,
+              startPos: new THREE.Vector3(startX, startY, startZ),
+              endPos: new THREE.Vector3(endX, endY, endZ)
+          }]);
+      }
   };
 
   const handleAirdropExplosion = () => {
@@ -341,9 +435,12 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
             <SceneLighting isLit={state.isLit} shadowsEnabled={quality.shadowsEnabled} />
 
             <Suspense fallback={null}>
-                {/* NEW COSMIC ELEMENTS */}
-                <CosmicBackground />
-                <AuroraBorealis />
+                {/* NEW COSMIC ELEMENTS - WRAPPED FOR INTERACTION */}
+                <group onClick={handleBackgroundClick}>
+                    <CosmicBackground />
+                    <AuroraBorealis />
+                </group>
+                
                 <FlyingSanta />
 
                 <MemoizedGlobe isNight={true} shakeIntensity={shakeIntensity} />
@@ -377,6 +474,16 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
                         position={exp.position} 
                         color={exp.color} 
                         onComplete={() => removeExplosion(exp.id)} 
+                    />
+                ))}
+
+                {/* Render Meteors */}
+                {meteors.map(m => (
+                    <Meteor 
+                        key={m.id}
+                        startPos={m.startPos}
+                        endPos={m.endPos}
+                        onComplete={() => removeMeteor(m.id)}
                     />
                 ))}
 

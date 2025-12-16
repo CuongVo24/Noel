@@ -1,6 +1,7 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { audioManager } from '../utils/audio';
 import '../types';
 
 const Reindeer = ({ offset }: { offset: [number, number, number] }) => (
@@ -47,6 +48,11 @@ const Reindeer = ({ offset }: { offset: [number, number, number] }) => (
 export const FlyingSanta = () => {
     const groupRef = useRef<THREE.Group>(null);
     const particleRef = useRef<THREE.Points>(null);
+    
+    // Interactive State
+    const speedMultiplierRef = useRef(1.0);
+    const jumpOffsetRef = useRef(0.0);
+    const progressRef = useRef(0); // Manually track progress to handle variable speed
 
     // Create Path
     const curve = useMemo(() => {
@@ -75,16 +81,44 @@ export const FlyingSanta = () => {
     const trailPos = useMemo(() => new Float32Array(trailCount * 3), []);
     const trailIdx = useRef(0);
 
-    useFrame((state) => {
-        const t = (state.clock.getElapsedTime() * 0.05) % 1;
+    const handleClick = (e: any) => {
+        e.stopPropagation();
+        audioManager.playSantaLaugh();
+        
+        // Boost Speed
+        speedMultiplierRef.current = 4.0;
+        
+        // Jump effect
+        jumpOffsetRef.current = 2.0;
+    };
+
+    useFrame((state, delta) => {
+        // 1. Manage Speed Decay
+        speedMultiplierRef.current = THREE.MathUtils.lerp(speedMultiplierRef.current, 1.0, delta * 0.8);
+
+        // 2. Manage Jump Decay
+        jumpOffsetRef.current = THREE.MathUtils.lerp(jumpOffsetRef.current, 0.0, delta * 3.0);
+
+        // 3. Move along curve
+        const baseSpeed = 0.05;
+        progressRef.current += (baseSpeed * speedMultiplierRef.current * delta);
+        const t = progressRef.current % 1; // Wrap around 0-1
+
         const pos = curve.getPointAt(t);
         const tangent = curve.getTangentAt(t).normalize();
         
+        // Apply Jump Offset (Up relative to world Y)
+        pos.y += jumpOffsetRef.current;
+
         if (groupRef.current) {
             groupRef.current.position.copy(pos);
             // Look ahead
             const lookAt = pos.clone().add(tangent);
             groupRef.current.lookAt(lookAt);
+            
+            // Add slight roll based on speed for dynamic feel
+            const roll = (speedMultiplierRef.current - 1.0) * 0.2;
+            groupRef.current.rotateZ(roll);
         }
 
         // Update trail particles (simple emitter)
@@ -104,7 +138,13 @@ export const FlyingSanta = () => {
     return (
         <>
             {/* SCALE UP: 1.5x bigger */}
-            <group ref={groupRef} scale={1.5}>
+            <group 
+                ref={groupRef} 
+                scale={1.5} 
+                onClick={handleClick}
+                onPointerOver={() => document.body.style.cursor = 'pointer'}
+                onPointerOut={() => document.body.style.cursor = 'auto'}
+            >
                 {/* SLEIGH */}
                 <group>
                     <mesh position={[0, 0, 0]}>
@@ -151,7 +191,7 @@ export const FlyingSanta = () => {
             </group>
 
             {/* MAGIC DUST TRAIL */}
-            <points ref={particleRef}>
+            <points ref={particleRef} frustumCulled={false}>
                 <bufferGeometry>
                     <bufferAttribute 
                         attach="attributes-position" 
