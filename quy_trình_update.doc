@@ -1,0 +1,3 @@
+dowload
+npm run build
+firebase deploy
