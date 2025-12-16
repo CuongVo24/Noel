@@ -13,58 +13,57 @@ interface TreeProps {
   superNovaTrigger?: number; 
 }
 
-// --- GEOMETRY-BASED SNOW CAP ---
-// Creates a physical snow layer on top of the tree cone
+// --- GEOMETRY-BASED SNOW CAP (Vertex Masking Strategy) ---
+// Creates a thin, rugged dust of snow on the upper "shoulders" of the cone.
 const TreeSnowCap = ({ args, scale, snowAmount }: { args: [number, number, number], scale: number, snowAmount: number }) => {
-    // args = [radius, height, segments]
-    // We want the snow to only cover the top ~40-50% (shoulders) of the cone.
-    
-    // 1. Calculate dimensions for a "Cap" cone
-    // If we cut the main cone at 50% height, the radius at that point is 50%.
-    // We create a new cone that represents this top half.
-    const originalHeight = args[1];
-    const originalRadius = args[0];
-    
-    const capHeight = originalHeight * 0.55; // Slightly more than half to overlap well
-    const capRadius = originalRadius * 0.55; // Match slope scale
-    
+    // args: [radius, height, radialSegments]
     const geometry = useMemo(() => {
-        // Create the smaller cap cone
-        // Scale radius x1.15 to make it thick and sit "on top" rather than inside
-        const geo = new THREE.ConeGeometry(capRadius * 1.15, capHeight, args[2] * 2);
+        const radius = args[0];
+        const height = args[1];
+        // Increase height segments (4th arg) to allow for vertical detail/masking
+        const geo = new THREE.ConeGeometry(radius, height, args[2] * 2, 12, true);
         
         const posAttribute = geo.attributes.position;
         const vertex = new THREE.Vector3();
         
-        // NOISE SEEDS
-        const noiseFreq = 3.5;
-        const dripFreq = 9.0;
-
         for (let i = 0; i < posAttribute.count; i++) {
             vertex.fromBufferAttribute(posAttribute, i);
             
-            const y = vertex.y; // Local Y. Center=0. Range: [-capHeight/2, capHeight/2]
-            const angle = Math.atan2(vertex.z, vertex.x);
+            // Normalized height (0 at bottom, 1 at top)
+            // Cone center is 0. Bottom is -height/2. Top is height/2.
+            const normalizedY = (vertex.y + height / 2) / height;
 
-            // 1. General Lumpy Noise (Thickness)
-            const lump = Math.sin(vertex.x * noiseFreq) * Math.cos(vertex.z * noiseFreq);
-            // Push outward along normal (approximation: just radial push)
-            const push = 0.08 + (lump * 0.03);
+            // STRATEGY: 
+            // 1. Bottom 50%: Push vertices INWARDS (scale < 1.0) so they hide inside the green foliage.
+            // 2. Top 50%: Push vertices OUTWARDS (scale > 1.0) to form the snow layer.
+            // 3. Noise: Apply jagged random noise to the top part for "sần sùi" texture.
 
-            vertex.x += vertex.x * push;
-            vertex.z += vertex.z * push;
-
-            // 2. Bottom Edge Dripping (Jaggedness)
-            // Determine where the bottom of this cap is
-            const bottomThreshold = -capHeight * 0.35;
-            
-            if (y < bottomThreshold) {
-                // Create sine wave drips at the edge
-                const drip = Math.sin(angle * dripFreq) * 0.12;
-                const noise = Math.sin(angle * 25.0) * 0.04;
+            if (normalizedY < 0.5) {
+                // HIDE: Shrink radius to 90% so it sits inside the green layer
+                // This creates a hidden base for the snow cap.
+                const shrinkFactor = 0.95;
+                vertex.x *= shrinkFactor;
+                vertex.z *= shrinkFactor;
+            } else {
+                // SHOW: The "Shoulder" area (Top half)
+                // 1. Base thickness (very thin layer)
+                let expansion = 1.02; 
                 
-                // Pull vertices down to create the drip over the green
-                vertex.y += (drip + noise);
+                // 2. Rugged Noise (High frequency, low amplitude)
+                // This gives the "dusting" look rather than a solid plastic cap.
+                const roughness = (Math.random() - 0.5) * 0.08; 
+                
+                // 3. Taper the transition so it doesn't look like a hard shelf
+                // Smoothly blend from inner (0.95) to outer (1.02) around the 0.5 mark
+                const transitionSmoothness = THREE.MathUtils.smoothstep(normalizedY, 0.5, 0.6);
+                
+                const finalScale = THREE.MathUtils.lerp(0.95, expansion + roughness, transitionSmoothness);
+                
+                vertex.x *= finalScale;
+                vertex.z *= finalScale;
+                
+                // Add tiny vertical noise for surface texture
+                vertex.y += (Math.random() - 0.5) * 0.04;
             }
 
             posAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
@@ -72,25 +71,17 @@ const TreeSnowCap = ({ args, scale, snowAmount }: { args: [number, number, numbe
         
         geo.computeVertexNormals();
         return geo;
-    }, [capRadius, capHeight, args]);
+    }, [args]);
 
     if (snowAmount <= 0.1) return null;
 
-    // POSITIONING:
-    // Green Cone (Height H): Center @ 0. Top @ +H/2.
-    // Cap Cone (Height h): Center @ 0. Top @ +h/2.
-    // We want CapTop to match GreenTop.
-    // OffsetY + h/2 = H/2  =>  OffsetY = (H - h) / 2
-    const yOffset = (originalHeight - capHeight) / 2;
-
     return (
-        <mesh position={[0, yOffset, 0]} geometry={geometry} scale={scale}>
-             <meshPhysicalMaterial 
-                color="#f8fafd" 
-                roughness={0.7} 
-                metalness={0.1}
-                clearcoat={0.5}
-                clearcoatRoughness={0.2}
+        <mesh position={[0, 0, 0]} geometry={geometry} scale={scale}>
+             <meshStandardMaterial 
+                color="#ffffff" 
+                roughness={1.0} // High roughness for dry snow
+                metalness={0.0}
+                // No clearcoat prevents the "plastic/wet" look
             />
         </mesh>
     );
@@ -108,7 +99,7 @@ const TreeLayer = ({ position, scale, snowAmount }: { position: [number, number,
         <meshStandardMaterial color="#2d5a27" roughness={0.8} />
       </mesh>
 
-      {/* 2. Physical Snow Cap Layer (Shoulders Only) */}
+      {/* 2. Thin Rugged Snow Patch */}
       <TreeSnowCap args={CONE_ARGS} scale={1.0} snowAmount={snowAmount} />
     </group>
   );

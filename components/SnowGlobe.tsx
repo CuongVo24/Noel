@@ -1,11 +1,11 @@
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { MeshReflectorMaterial, Sparkles } from '@react-three/drei';
+import { Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 import { SNOW_GLOBE_RADIUS } from '../constants';
 import { getSnowHeight } from '../utils/snowMath';
 
-// Shared material props for consistent look between floor and bowl
+// Shared material props for consistent look
 const SNOW_MATERIAL_PROPS = {
   color: "#ffffff",
   roughness: 0.9,
@@ -14,36 +14,40 @@ const SNOW_MATERIAL_PROPS = {
   clearcoatRoughness: 0.4
 };
 
-// --- PROCEDURAL RUGGED SNOW FLOOR ---
+// --- PROCEDURAL RUGGED SNOW FLOOR (Flattened Sphere Technique) ---
 const RuggedSnowFloor = () => {
   const geometry = useMemo(() => {
-    // High-res plane for terrain surface
-    const size = 25; 
-    const resolution = 128;
-    const geo = new THREE.PlaneGeometry(size, size, resolution, resolution);
+    // 1. GEOMETRY SOURCE: SphereGeometry
+    // Radius 11.8 (Slightly smaller than Glass 12.0 to prevent Z-fighting)
+    // High segment count for detailed terrain noise
+    const radius = 11.8;
+    const geo = new THREE.SphereGeometry(radius, 128, 64);
     const posAttribute = geo.attributes.position;
+    const vertex = new THREE.Vector3();
     
+    // The height at which the sphere is "sliced" to form the flat terrain
+    // 0.0 aligns with the game's physics engine (snowMath)
+    const SNOW_LEVEL = 0.0;
+
     for (let i = 0; i < posAttribute.count; i++) {
-      const x = posAttribute.getX(i);
-      const y = posAttribute.getY(i); // This is Z in world space (Plane is rotated)
-      const r = Math.sqrt(x * x + y * y);
-      
-      // 1. HARD CLIP: Drop vertices outside the globe glass
-      if (r > SNOW_GLOBE_RADIUS - 0.1) {
-          posAttribute.setZ(i, -10); 
-          continue;
+      vertex.fromBufferAttribute(posAttribute, i);
+
+      // 2. VERTEX MANIPULATION
+      // If vertex is in the top hemisphere (above snow level), squash it down.
+      // If vertex is in the bottom hemisphere, leave it alone (forms the bowl).
+      if (vertex.y >= SNOW_LEVEL) {
+          // Squash Y to the surface level
+          vertex.y = SNOW_LEVEL;
+
+          // 3. APPLY NOISE
+          // Query the shared "Physics Engine" to get the terrain height at this X/Z
+          // This ensures the mesh perfectly matches where objects sit.
+          const terrainHeight = getSnowHeight(vertex.x, vertex.z);
+          
+          vertex.y += terrainHeight;
       }
 
-      // 2. CALCULATE HEIGHT (Using Shared Math)
-      let h = getSnowHeight(x, y);
-
-      // 3. VISUAL GRAIN (Visual only, not affecting physics)
-      // Adds subtle surface texture
-      if (r > 4.5) { // Only add grain outside safe zone
-          h += (Math.random() - 0.5) * 0.05;
-      }
-
-      posAttribute.setZ(i, h);
+      posAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
     }
     
     geo.computeVertexNormals();
@@ -51,24 +55,13 @@ const RuggedSnowFloor = () => {
   }, []);
 
   return (
-    <group>
-        {/* Top Surface (The Terrain) */}
-        <mesh 
-            geometry={geometry} 
-            rotation={[-Math.PI / 2, 0, 0]} 
-            receiveShadow
-        >
-            <meshPhysicalMaterial {...SNOW_MATERIAL_PROPS} />
-        </mesh>
-
-        {/* Bottom Bowl Fill (The Volume) 
-            Creates the solid look of snow filling the bottom hemisphere.
-        */}
-        <mesh position={[0, 0, 0]} rotation={[0, 0, 0]}>
-             <sphereGeometry args={[SNOW_GLOBE_RADIUS - 0.2, 64, 32, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2]} />
-             <meshPhysicalMaterial {...SNOW_MATERIAL_PROPS} side={THREE.FrontSide} />
-        </mesh>
-    </group>
+    <mesh 
+        geometry={geometry} 
+        receiveShadow
+        position={[0, 0, 0]}
+    >
+        <meshPhysicalMaterial {...SNOW_MATERIAL_PROPS} />
+    </mesh>
   );
 };
 
@@ -91,8 +84,6 @@ export const SnowGlobe: React.FC<{ isNight: boolean; shakeIntensity: number }> =
 
   return (
     <group>
-      {/* Background Stars Removed: Handled by SolarSystem.tsx */}
-
       {/* The Glass Sphere */}
       <mesh ref={glassRef} receiveShadow>
         <sphereGeometry args={[SNOW_GLOBE_RADIUS, 64, 64]} />
@@ -112,31 +103,8 @@ export const SnowGlobe: React.FC<{ isNight: boolean; shakeIntensity: number }> =
         />
       </mesh>
 
-      {/* RUGGED SNOW SYSTEM */}
+      {/* RUGGED SNOW SYSTEM (Volumetric Fill) */}
       <RuggedSnowFloor />
-
-      {/* Reflective Ice Patches 
-          Placed at y = -0.2.
-          This will peek through in deep valleys of the noise logic.
-      */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 0]} receiveShadow>
-        <circleGeometry args={[SNOW_GLOBE_RADIUS - 1.5, 64]} />
-        <MeshReflectorMaterial
-          blur={[300, 100]}
-          resolution={1024}
-          mixBlur={5} 
-          mixStrength={15} 
-          roughness={0.5}
-          depthScale={0}
-          minDepthThreshold={0.4}
-          maxDepthThreshold={1.4}
-          color="#e0f7fa"
-          metalness={0.2}
-          mirror={0.2} 
-          transparent
-          opacity={0.5}
-        />
-      </mesh>
 
       {/* Falling Snow Particles */}
       <group ref={sparklesRef}>

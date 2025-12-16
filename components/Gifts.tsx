@@ -19,61 +19,35 @@ const STATIC_GIFTS_DATA: Gift[] = [
     { id: 'g10', position: [2, 0, 2.5], color: '#607d8b', message: 'Merry Xmas!', sender: 'Colleague', opened: false },
 ];
 
-// --- 1. ORGANIC SNOW CAP (Thinned & Tamed) ---
+// --- 1. ORGANIC SNOW CAP (Thin Crust, No Bow) ---
 const OrganicSnowCap = ({ size }: { size: number }) => {
   const geometry = useMemo(() => {
-    // REDUCED SCALE: From 1.15 down to 1.08. 
-    // Tighter fit, less overhang.
-    const geo = new THREE.PlaneGeometry(size * 1.08, size * 1.08, 64, 64);
+    // Plane covering the lid
+    const geo = new THREE.PlaneGeometry(size, size, 32, 32);
     const posAttribute = geo.attributes.position;
     const vertex = new THREE.Vector3();
     
-    // Random seeds per instance
-    const peakOffsetX = (Math.random() - 0.5) * size * 0.2; 
-    const peakOffsetY = (Math.random() - 0.5) * size * 0.2;
-    const noisePhase = Math.random() * 100;
-
-    // REDUCED HEIGHT: From 0.18 down to 0.06.
-    // This creates a thin layer instead of a pile.
-    const maxPileHeight = size * 0.06; 
-    const boxRadius = size * 0.5;
-
     for (let i = 0; i < posAttribute.count; i++) {
         vertex.fromBufferAttribute(posAttribute, i);
         
-        const x = vertex.x;
-        const y = vertex.y; // Z in world space relative to plane
+        // Distance from center
+        const dist = Math.sqrt(vertex.x * vertex.x + vertex.y * vertex.y); // Plane lies on XY before rotation
+        const maxDist = size / 2;
 
-        // 1. Asymmetry
-        const dx = x - peakOffsetX;
-        const dy = y - peakOffsetY;
-        const distFromPeak = Math.sqrt(dx * dx + dy * dy);
-        
-        // 2. Base Mound (Smoother, wider Gaussian for a flat cap)
-        const sigma = size * 0.6; 
-        let h = maxPileHeight * Math.exp(-(distFromPeak * distFromPeak) / (2 * sigma * sigma));
+        // Base Height: Very Thin (0.02)
+        let h = 0.02;
 
-        // 3. Low Freq Noise (Gentle lumps)
-        const lumpFreq = 5.0; 
-        const lumpAmp = size * 0.02; // Very subtle lumps
-        const lumps = Math.sin(x * lumpFreq + noisePhase) * Math.cos(y * lumpFreq + noisePhase);
-        h += lumps * lumpAmp;
+        // RUGGED NOISE: High frequency, low amplitude
+        h += (Math.random() - 0.5) * 0.015;
 
-        // 4. High Freq Noise (Texture)
-        h += (Math.random() - 0.5) * 0.005;
-
-        // CLAMP: Prevent holes in the snow cap (no negative displacement relative to base)
-        h = Math.max(0, h);
-
-        // 5. Edge Droop (Gravity) - Subtle curvature at the very lip
-        const distFromCenter = Math.sqrt(x*x + y*y);
-        const droopStart = boxRadius * 0.98; // Push droop to the very edge
-        if (distFromCenter > droopStart) {
-            const overhang = (distFromCenter - droopStart) / (size * 0.08);
-            // Gentle curve down
-            const droop = Math.pow(overhang, 2.0) * (size * 0.15);
-            h -= droop;
+        // EDGE DROP-OFF:
+        if (dist > maxDist * 0.95) {
+             const t = (dist - maxDist * 0.95) / (maxDist * 0.05);
+             h *= (1.0 - t); // Fade height to 0
         }
+
+        // Clamp
+        h = Math.max(0.002, h); 
 
         posAttribute.setZ(i, h); 
     }
@@ -86,15 +60,15 @@ const OrganicSnowCap = ({ size }: { size: number }) => {
     <mesh 
       geometry={geometry} 
       rotation={[-Math.PI / 2, 0, 0]} 
+      // Embed slightly (-0.005) into the lid to prevent floating/gaps
+      position={[0, -0.005, 0]} 
       castShadow 
       receiveShadow
     >
-      <meshPhysicalMaterial 
-        color="#f8fafd" 
-        roughness={0.7} 
+      <meshStandardMaterial 
+        color="#ffffff" 
+        roughness={0.9} 
         metalness={0.1}
-        clearcoat={0.5}
-        clearcoatRoughness={0.2}
       />
     </mesh>
   );
@@ -190,7 +164,7 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
       <group position={[0, HALF, 0]}>
          <mesh geometry={bodyGeo} material={boxMat} castShadow receiveShadow />
          
-         {/* Ribbons as BoxGeometry - FIXED THICKNESS to avoid Z-Fighting */}
+         {/* Ribbons as BoxGeometry - Solid with thickness to avoid glitches */}
          <mesh position={[0, 0, HALF + 0.005]}>
              <boxGeometry args={[0.08, SIZE, 0.015]} /> 
              <meshStandardMaterial color="#FFF" />
@@ -211,15 +185,9 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
              {/* A. The Lid Rim (Cardboard) */}
              <mesh position={[0, LID_H/2, 0]} geometry={lidRimGeo} material={boxMat} castShadow receiveShadow />
 
-             {/* B. The Snow Cap */}
+             {/* B. The Snow Cap - Embedded into lid, NO BOW */}
              <group position={[0, LID_H * 0.4, 0]}>
                  <OrganicSnowCap size={SIZE} />
-                 
-                 {/* Bow on top of snow */}
-                 <mesh position={[0, 0.04, 0]}>
-                     <sphereGeometry args={[0.07]} />
-                     <meshStandardMaterial color="#FFF" roughness={0.9} />
-                 </mesh>
              </group>
 
           </group>
