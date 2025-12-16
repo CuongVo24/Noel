@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { useSpring, animated } from '@react-spring/three';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -78,7 +79,45 @@ const OrganicSnowCap = ({ size }: { size: number }) => {
   );
 };
 
-// --- 2. GIFT BOX COMPONENT ---
+// --- 2. GIFT CONTENT (Magical Crystal) ---
+const GiftContent = ({ color, active }: { color: string, active: boolean }) => {
+    const meshRef = useRef<THREE.Mesh>(null);
+
+    useFrame((state, delta) => {
+        if (meshRef.current) {
+            // Constant rotation for magical feel
+            meshRef.current.rotation.x += delta * 0.5;
+            meshRef.current.rotation.y += delta * 1.0;
+        }
+    });
+
+    // Reveal Animation
+    const { scale, pos } = useSpring({
+        scale: active ? 1 : 0,
+        pos: active ? [0, 0.3, 0] : [0, 0, 0], // Float up when active
+        config: { tension: 120, friction: 14 }
+    });
+
+    return (
+        <animated.mesh
+            ref={meshRef}
+            scale={scale}
+            position={pos as any} 
+        >
+            <icosahedronGeometry args={[0.12, 0]} />
+            <meshStandardMaterial
+                color="#ffffff"
+                emissive={color}
+                emissiveIntensity={2.0}
+                roughness={0.0}
+                metalness={0.5}
+                toneMapped={false} // Enhance bloom
+            />
+        </animated.mesh>
+    );
+};
+
+// --- 3. GIFT BOX COMPONENT ---
 interface GiftBoxProps {
   gift: Gift;
   onOpen: (msg: string) => void;
@@ -144,8 +183,9 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
     return merged;
   }, [SIZE, LID_H, WALL]);
 
-  const { lidRot } = useSpring({
+  const { lidRot, lightIntensity } = useSpring({
     lidRot: active ? -Math.PI / 1.5 : 0, 
+    lightIntensity: active ? 3.0 : 0.0,
     config: { tension: 200, friction: 20 }
   });
 
@@ -167,7 +207,18 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
       <group position={[0, HALF, 0]}>
          {/* Container */}
          <mesh geometry={bodyGeo} material={boxMat} castShadow receiveShadow />
-         {/* NO RIBBONS HERE */}
+         
+         {/* MAGICAL CONTENT INSIDE */}
+         <GiftContent color={gift.color} active={active} />
+         
+         {/* INTERNAL LIGHTING */}
+         <animated.pointLight 
+            color={gift.color} 
+            intensity={lightIntensity} 
+            distance={2} 
+            decay={2} 
+            position={[0, 0.2, 0]}
+         />
       </group>
 
       {/* --- 2. ANIMATED LID GROUP --- */}
@@ -186,8 +237,6 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
                  <boxGeometry args={[SIZE, WALL, SIZE]} />
                  <primitive object={boxMat} />
              </mesh>
-
-             {/* NO RIBBONS HERE */}
 
              {/* D. The Snow Cap - Sits directly on top of the lid plate */}
              {/* Total Y = LID_H + WALL + epsilon */}

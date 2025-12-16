@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, push, set, remove, off } from 'firebase/database';
+import { getDatabase, ref, onValue, push, set, remove, query, limitToLast } from 'firebase/database';
 import { Decoration } from '../types';
 
 // --- USER CONFIGURATION ---
@@ -39,7 +39,13 @@ export const subscribeToDecorations = (callback: (data: Decoration[]) => void) =
 
   const decorationsRef = ref(db, 'decorations');
   
-  const listener = onValue(decorationsRef, (snapshot) => {
+  // PERFORMANCE OPTIMIZATION:
+  // Only fetch the last 50 items to prevent the scene from becoming too heavy
+  // as the database grows over time.
+  const recentDecorationsQuery = query(decorationsRef, limitToLast(50));
+  
+  // onValue returns the unsubscribe function directly
+  const unsubscribe = onValue(recentDecorationsQuery, (snapshot) => {
     const data = snapshot.val();
     if (data) {
       // Convert Object map to Array
@@ -53,7 +59,7 @@ export const subscribeToDecorations = (callback: (data: Decoration[]) => void) =
   });
 
   // Return unsubscribe function
-  return () => off(decorationsRef, 'value', listener);
+  return unsubscribe;
 };
 
 // Add a new decoration

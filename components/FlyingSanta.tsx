@@ -52,12 +52,18 @@ export const FlyingSanta = () => {
     const curve = useMemo(() => {
         // Points creating a wobbly circle around the center
         const points = [];
-        const radius = 25;
+        
+        // ADJUSTMENTS:
+        // Reduced Radius from 25 -> 18 to bring him closer to the Snow Globe (Radius 12)
+        const radius = 18; 
+        
         for (let i = 0; i <= 10; i++) {
             const t = (i / 10) * Math.PI * 2;
             points.push(new THREE.Vector3(
                 Math.sin(t) * radius,
-                15 + Math.sin(t * 3) * 5, // Wobbly height
+                // ADJUSTMENT: Lowered height from ~15 to ~7.
+                // Tree is ~5 high. This puts Santa just above the tree line.
+                7 + Math.sin(t * 3) * 2, 
                 Math.cos(t) * radius
             ));
         }
@@ -97,7 +103,8 @@ export const FlyingSanta = () => {
 
     return (
         <>
-            <group ref={groupRef}>
+            {/* SCALE UP: 1.5x bigger */}
+            <group ref={groupRef} scale={1.5}>
                 {/* SLEIGH */}
                 <group>
                     <mesh position={[0, 0, 0]}>

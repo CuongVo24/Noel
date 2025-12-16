@@ -13,58 +13,65 @@ interface TreeProps {
   superNovaTrigger?: number; 
 }
 
-// --- GEOMETRY-BASED SNOW CAP (Vertex Masking Strategy) ---
-// Creates a thin, rugged dust of snow on the upper "shoulders" of the cone.
+// --- GEOMETRY-BASED SNOW CAP ---
+// Creates a rugged, jagged layer of snow that sits on top of the tree branches.
 const TreeSnowCap = ({ args, scale, snowAmount }: { args: [number, number, number], scale: number, snowAmount: number }) => {
     // args: [radius, height, radialSegments]
     const geometry = useMemo(() => {
         const radius = args[0];
         const height = args[1];
-        // Increase height segments (4th arg) to allow for vertical detail/masking
-        const geo = new THREE.ConeGeometry(radius, height, args[2] * 2, 12, true);
+        const radialSegments = 64; // High detail for rugged edges
+        const heightSegments = 12; // Allows for surface undulation
+
+        // Create base cone
+        const geo = new THREE.ConeGeometry(radius, height, radialSegments, heightSegments, true); // Open ended to save polys
         
         const posAttribute = geo.attributes.position;
         const vertex = new THREE.Vector3();
         
+        // Pseudo-random noise helper without external dependencies
+        const getNoise = (x: number, z: number, freq: number) => {
+            return Math.sin(x * freq) * Math.cos(z * freq);
+        };
+
         for (let i = 0; i < posAttribute.count; i++) {
             vertex.fromBufferAttribute(posAttribute, i);
             
-            // Normalized height (0 at bottom, 1 at top)
+            // 1. Calculate relative height (0.0 at bottom, 1.0 at top)
             // Cone center is 0. Bottom is -height/2. Top is height/2.
-            const normalizedY = (vertex.y + height / 2) / height;
+            const yNormalized = (vertex.y + height / 2) / height;
 
-            // STRATEGY: 
-            // 1. Bottom 50%: Push vertices INWARDS (scale < 1.0) so they hide inside the green foliage.
-            // 2. Top 50%: Push vertices OUTWARDS (scale > 1.0) to form the snow layer.
-            // 3. Noise: Apply jagged random noise to the top part for "sần sùi" texture.
+            // 2. EXPANSION: Push everything out slightly to sit ON TOP of the green layer
+            // Taper expansion: thickest at bottom rim, thinnest at top tip
+            const expansionBase = 1.04;
+            
+            // 3. RUGGEDNESS ("Sần sùi")
+            // Apply noise to X/Z to make the surface uneven
+            const angle = Math.atan2(vertex.z, vertex.x);
+            const noise = getNoise(vertex.x, vertex.z, 5.0) * 0.05;
+            const ruggedScale = expansionBase + noise;
+            
+            vertex.x *= ruggedScale;
+            vertex.z *= ruggedScale;
 
-            if (normalizedY < 0.5) {
-                // HIDE: Shrink radius to 90% so it sits inside the green layer
-                // This creates a hidden base for the snow cap.
-                const shrinkFactor = 0.95;
-                vertex.x *= shrinkFactor;
-                vertex.z *= shrinkFactor;
-            } else {
-                // SHOW: The "Shoulder" area (Top half)
-                // 1. Base thickness (very thin layer)
-                let expansion = 1.02; 
+            // 4. JAGGED BOTTOM EDGE (The "Drip" Look)
+            // If we are at the bottom rim (low yNormalized), distort Y downwards
+            if (yNormalized < 0.15) {
+                // Create irregular drips using combined sine waves based on angle
+                const dripNoise = Math.sin(angle * 9) + Math.cos(angle * 17) * 0.5;
                 
-                // 2. Rugged Noise (High frequency, low amplitude)
-                // This gives the "dusting" look rather than a solid plastic cap.
-                const roughness = (Math.random() - 0.5) * 0.08; 
+                // Push vertices down where noise is high
+                const dripStrength = Math.max(0, dripNoise) * 0.15; 
+                vertex.y -= dripStrength;
                 
-                // 3. Taper the transition so it doesn't look like a hard shelf
-                // Smoothly blend from inner (0.95) to outer (1.02) around the 0.5 mark
-                const transitionSmoothness = THREE.MathUtils.smoothstep(normalizedY, 0.5, 0.6);
-                
-                const finalScale = THREE.MathUtils.lerp(0.95, expansion + roughness, transitionSmoothness);
-                
-                vertex.x *= finalScale;
-                vertex.z *= finalScale;
-                
-                // Add tiny vertical noise for surface texture
-                vertex.y += (Math.random() - 0.5) * 0.04;
+                // Pull vertices in slightly at the drips so they hang naturally
+                vertex.x *= 0.98;
+                vertex.z *= 0.98;
             }
+
+            // 5. TOP FLUFF
+            // Add a little vertical noise to the surface
+            vertex.y += getNoise(vertex.x * 2, vertex.z * 2, 10) * 0.02;
 
             posAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
         }
@@ -73,15 +80,16 @@ const TreeSnowCap = ({ args, scale, snowAmount }: { args: [number, number, numbe
         return geo;
     }, [args]);
 
+    // Opacity/Visibility based on snow amount
     if (snowAmount <= 0.1) return null;
 
     return (
         <mesh position={[0, 0, 0]} geometry={geometry} scale={scale}>
              <meshStandardMaterial 
                 color="#ffffff" 
-                roughness={1.0} // High roughness for dry snow
+                roughness={1.0} // High roughness for dry, powdery snow
                 metalness={0.0}
-                // No clearcoat prevents the "plastic/wet" look
+                flatShading={false}
             />
         </mesh>
     );
@@ -89,7 +97,6 @@ const TreeSnowCap = ({ args, scale, snowAmount }: { args: [number, number, numbe
 
 const TreeLayer = ({ position, scale, snowAmount }: { position: [number, number, number], scale: number, snowAmount: number }) => {
   // Base Cone Args: Radius, Height, Segments
-  // WIDENED RADIUS from 1.5 to 1.8 for better shelving
   const CONE_ARGS: [number, number, number] = [1.8, 2.5, 32];
 
   return (
@@ -100,7 +107,7 @@ const TreeLayer = ({ position, scale, snowAmount }: { position: [number, number,
         <meshStandardMaterial color="#2d5a27" roughness={0.8} />
       </mesh>
 
-      {/* 2. Thin Rugged Snow Patch */}
+      {/* 2. Geometric Snow Cap */}
       <TreeSnowCap args={CONE_ARGS} scale={1.0} snowAmount={snowAmount} />
     </group>
   );
@@ -157,8 +164,9 @@ export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart
 
         if (superNovaTrigger > 0 && age < LIGHT_DURATION) {
             const t = age / LIGHT_DURATION;
-            starLightRef.current.intensity = THREE.MathUtils.lerp(20.0, baseIntensity, t);
-            starLightRef.current.distance = THREE.MathUtils.lerp(150.0, baseDistance, t);
+            // BOOST: Intensity 80 (Blinding), Distance 300 (Whole Scene)
+            starLightRef.current.intensity = THREE.MathUtils.lerp(80.0, baseIntensity, t);
+            starLightRef.current.distance = THREE.MathUtils.lerp(300.0, baseDistance, t);
             starLightRef.current.decay = THREE.MathUtils.lerp(1.0, baseDecay, t);
         } else {
             starLightRef.current.intensity = baseIntensity;
@@ -174,7 +182,8 @@ export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart
 
         if (superNovaTrigger > 0 && age < FLASH_DURATION) {
             const t = age / FLASH_DURATION;
-            const scale = THREE.MathUtils.lerp(50, 0, t);
+            // BOOST: Scale 120 (Massive Shockwave)
+            const scale = THREE.MathUtils.lerp(120, 0, t);
             const opacity = THREE.MathUtils.lerp(1, 0, t);
             
             flashSpriteRef.current.scale.setScalar(scale);
@@ -201,9 +210,10 @@ export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart
         const worldNormal = e.face.normal.clone().transformDirection(e.object.matrixWorld).normalize();
         const localNormal = worldNormal.clone().transformDirection(groupRef.current.matrixWorld.clone().invert()).normalize();
 
-        // 3. Apply Offset to prevent clipping
-        // INCREASED OFFSET TO 0.6 as per bug report (was 0.4)
-        localPoint.add(localNormal.clone().multiplyScalar(0.6));
+        // 3. Apply Aggressive Offset to prevent clipping
+        // INCREASED from 0.7 to 0.8 to account for the geometry-based snow cap thickness.
+        // This ensures the pivot point of the decoration floats outside the snow surface.
+        localPoint.add(localNormal.clone().multiplyScalar(0.8));
         
         onDecorateStart(localPoint, localNormal);
     } catch (err) {
@@ -220,7 +230,6 @@ export const ChristmasTree: React.FC<TreeProps> = ({ snowAmount, onDecorateStart
     e.stopPropagation();
     if (groupRef.current && e.point) {
         const localPoint = groupRef.current.worldToLocal(e.point.clone());
-        // Simple visual feedback doesn't need complex normal math
         setHoverPoint(localPoint);
     }
   };

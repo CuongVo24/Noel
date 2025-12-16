@@ -93,14 +93,15 @@ export const SnowGlobe: React.FC<{ isNight: boolean; shakeIntensity: number }> =
           opacity={0.15}
           metalness={0.0}
           roughness={0.0} 
-          ior={1.0} 
+          ior={1.0}           // Air-like index of refraction
           thickness={0} 
-          reflectivity={0.02} 
-          clearcoat={0}
+          reflectivity={0}    // Disable reflections
+          clearcoat={0}       // Remove shiny coating
+          specularIntensity={0} // Remove specular highlights
           color="#eefeff" 
           side={THREE.FrontSide} 
           transparent
-          envMapIntensity={1.0}
+          envMapIntensity={0} // Disable environment map influence
         />
       </mesh>
 

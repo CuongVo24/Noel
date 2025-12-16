@@ -1,10 +1,10 @@
-import React, { useRef, useState, useMemo, useLayoutEffect } from 'react';
+import React, { useRef, useState, useMemo, useLayoutEffect, memo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { Decoration } from '../types';
 
-export const DecorationMesh: React.FC<{ data: Decoration; isLit: boolean }> = ({ data, isLit }) => {
+const DecorationMeshComponent: React.FC<{ data: Decoration; isLit: boolean }> = ({ data, isLit }) => {
   const groupRef = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
   const [born, setBorn] = useState(0);
@@ -69,15 +69,17 @@ export const DecorationMesh: React.FC<{ data: Decoration; isLit: boolean }> = ({
   });
 
   // --- REALISTIC GEOMETRY RENDERERS ---
-  // Added Z-Offsets (position={[0,0,X]}) to shift anchor point to the back of the object
+  // FIXED: Adjusted Z-Offsets (position={[0,0,X]}) significantly.
+  // The Pivot Point (0,0,0) is provided by `Tree.tsx` (which is already offset 0.8 from green cone).
+  // These internal offsets shift the mesh further OUT along Z so the pivot acts as the "hook" on the back.
 
   const renderContent = () => {
     switch (data.type) {
         case 'star':
             // BRIGHT STAR: 5-pointed Golden/Yellow Star
-            // Offset Z +0.1 to clear tree surface
+            // Offset Z +0.15 so center of mass is out, pivot is at back
             return (
-                <group position={[0, 0, 0.1]} scale={1.5}>
+                <group position={[0, 0, 0.15]} scale={1.5}>
                     <mesh geometry={starGeometry} castShadow>
                         <meshStandardMaterial 
                             color="#FFD700" 
@@ -92,10 +94,9 @@ export const DecorationMesh: React.FC<{ data: Decoration; isLit: boolean }> = ({
 
         case 'candy':
             // CANDY CANE: Red with Pink/White stripes
-            // Offset Z +0.1
-            // Note: Rotation logic simplified as Z is now Normal.
+            // Offset Z +0.15
             return (
-                <group position={[0, 0, 0.1]} rotation={[0, 0, 0]} scale={0.8}>
+                <group position={[0, 0, 0.15]} rotation={[0, 0, 0]} scale={0.8}>
                     {/* Main Stick - Red */}
                     <mesh position={[0, -0.1, 0]} castShadow>
                         <cylinderGeometry args={[0.03, 0.03, 0.4]} />
@@ -119,9 +120,9 @@ export const DecorationMesh: React.FC<{ data: Decoration; isLit: boolean }> = ({
 
         case 'stocking':
              // STOCKING: Blue body with Yellow/Orange accents
-             // Offset Z +0.1
+             // Offset Z +0.15
              return (
-                 <group position={[0, 0, 0.1]} scale={0.7} rotation={[0, 0, 0]}>
+                 <group position={[0, 0, 0.15]} scale={0.7} rotation={[0, 0, 0]}>
                     {/* Leg (Blue) */}
                     <mesh position={[0, 0.15, 0]} castShadow>
                         <cylinderGeometry args={[0.12, 0.1, 0.35]} />
@@ -153,9 +154,9 @@ export const DecorationMesh: React.FC<{ data: Decoration; isLit: boolean }> = ({
         case 'orb':
         default:
             // MAGIC ORB: Purple/Violet with Emissive Glow
-            // Offset Z +0.2 (Radius is 0.15, so 0.2 ensures back touches surface)
+            // Offset Z +0.25 (Radius is 0.15, so back of sphere is at +0.10 relative to pivot)
             return (
-                <group position={[0, 0, 0.2]}>
+                <group position={[0, 0, 0.25]}>
                     <mesh castShadow>
                         <sphereGeometry args={[0.15, 32, 32]} />
                         <meshStandardMaterial 
@@ -214,3 +215,10 @@ export const DecorationMesh: React.FC<{ data: Decoration; isLit: boolean }> = ({
     </group>
   );
 };
+
+// Memoize to prevent re-renders of existing items when new ones are added
+export const DecorationMesh = memo(DecorationMeshComponent, (prev, next) => {
+    // Only re-render if the ID changes (different item) or lighting state changes globally
+    // We strictly assume 'data' content (position, type) doesn't change for a specific ID once created.
+    return prev.data.id === next.data.id && prev.isLit === next.isLit;
+});
