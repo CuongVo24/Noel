@@ -26,6 +26,7 @@ import { SantaAirdrop } from '../SantaAirdrop';
 import { CosmicBackground } from '../CosmicBackground'; // ADDED
 import { AuroraBorealis } from '../AuroraBorealis'; // ADDED
 import { FlyingSanta } from '../FlyingSanta'; // ADDED
+import { ConfettiExplosion } from '../VFX/ConfettiExplosion'; // ADDED
 
 // --- MEMOIZED COMPONENTS ---
 const MemoizedTree = memo(ChristmasTree);
@@ -194,6 +195,9 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
   const [shakeIntensity, setShakeIntensity] = useState(0);
   const [globalFlareTrigger, setGlobalFlareTrigger] = useState(0);
   const [heatWaveIntensity, setHeatWaveIntensity] = useState(0);
+  
+  // VFX State
+  const [explosions, setExplosions] = useState<{ id: string, position: THREE.Vector3, color: string }[]>([]);
 
   // Drop State
   const [dropEvent, setDropEvent] = useState<{ x: number, y: number, type: DecorationType } | null>(null);
@@ -207,6 +211,27 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
     }, 100);
     return () => clearInterval(decay);
   }, [state.gameState]);
+
+  // Wrapper for Decoration Placement to trigger Sensory Feedback
+  const handleDecorate = (point: THREE.Vector3, normal?: THREE.Vector3, type?: DecorationType) => {
+      // 1. Audio Feedback
+      if (type) {
+          audioManager.playDropSound(type);
+      } else {
+          audioManager.playChime(); // Fallback for modal clicks
+      }
+
+      // 2. Visual Feedback (Confetti)
+      const explosionId = uuidv4();
+      setExplosions(prev => [...prev, { id: explosionId, position: point, color: state.userColor }]);
+
+      // 3. Original Logic
+      onDecorateStart(point, normal, type);
+  };
+
+  const removeExplosion = (id: string) => {
+      setExplosions(prev => prev.filter(e => e.id !== id));
+  };
 
   const handlePointerMove = (e: React.PointerEvent) => {
       const speed = Math.abs(e.movementX) + Math.abs(e.movementY);
@@ -272,8 +297,8 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
         onDrop={handleDrop}
     >
         <Canvas shadows={quality.shadowsEnabled} dpr={quality.dpr}>
-            {/* Internal Controller for Raycasting */}
-            <DropRaycaster dropEvent={dropEvent} onDecorate={onDecorateStart} />
+            {/* Internal Controller for Raycasting - Uses Wrapped HandleDecorate */}
+            <DropRaycaster dropEvent={dropEvent} onDecorate={handleDecorate} />
 
             <InteractionController 
                 setFireworksPos={setFireworksPos}
@@ -325,7 +350,7 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
                 
                 <MemoizedTree 
                     snowAmount={state.snowAmount} 
-                    onDecorateStart={onDecorateStart}
+                    onDecorateStart={handleDecorate}
                     decorations={state.decorations}
                     isLit={state.isLit}
                     onStarClick={handleStarClick}
@@ -344,6 +369,16 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
                         onComplete={() => setFireworksPos(null)} 
                     />
                 )}
+
+                {/* Render Confetti Explosions */}
+                {explosions.map(exp => (
+                    <ConfettiExplosion 
+                        key={exp.id} 
+                        position={exp.position} 
+                        color={exp.color} 
+                        onComplete={() => removeExplosion(exp.id)} 
+                    />
+                ))}
 
                 <group position={cf1} scale={1.5}>
                     <Campfire position={[0, 0, 0]} flareTrigger={globalFlareTrigger} />

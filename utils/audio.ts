@@ -22,6 +22,56 @@ class AudioManager {
     return this.isMuted;
   }
 
+  // --- NEW: DECORATION SFX ---
+  playDropSound(type: string) {
+    if (!this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    
+    // Helper for simple envelopes
+    const playTone = (freq: number, type: OscillatorType, duration: number, vol: number = 0.3, detune: number = 0) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        osc.detune.value = detune;
+        
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(vol, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        
+        osc.connect(gain);
+        gain.connect(this.masterGain!);
+        osc.start(now);
+        osc.stop(now + duration);
+    };
+
+    switch (type) {
+        case 'orb': // Glass Ding (High Sine)
+            playTone(1200, 'sine', 1.5, 0.15);
+            playTone(2400, 'sine', 0.8, 0.05); // Harmonic
+            break;
+            
+        case 'star': // Magical Chime (Arpeggio)
+            playTone(880, 'sine', 1.2, 0.1);
+            setTimeout(() => { if(this.ctx) playTone(1100, 'sine', 1.2, 0.1); }, 50);
+            setTimeout(() => { if(this.ctx) playTone(1320, 'sine', 1.2, 0.1); }, 100);
+            break;
+            
+        case 'candy': // Wood/Plastic Click (Square/Triangle)
+            playTone(600, 'square', 0.08, 0.1);
+            setTimeout(() => { if(this.ctx) playTone(100, 'triangle', 0.1, 0.15); }, 10);
+            break;
+            
+        case 'stocking': // Soft Thud (Low Triangle)
+            playTone(80, 'triangle', 0.2, 0.4);
+            playTone(60, 'sine', 0.3, 0.3);
+            break;
+            
+        default: // Generic Pop
+            playTone(400, 'sine', 0.2, 0.2);
+    }
+  }
+
   playChime() {
     if (!this.ctx || this.isMuted) return;
     const osc = this.ctx.createOscillator();

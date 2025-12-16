@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useSpring, animated } from '@react-spring/three';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Gift } from '../types';
@@ -85,27 +84,34 @@ const OrganicSnowCap = ({ size }: { size: number }) => {
 // --- 2. GIFT CONTENT (Magical Crystal) ---
 const GiftContent = ({ color, active }: { color: string, active: boolean }) => {
     const meshRef = useRef<THREE.Mesh>(null);
+    
+    // Animation refs
+    const currentScale = useRef(0);
+    const currentY = useRef(0);
 
     useFrame((state, delta) => {
         if (meshRef.current) {
             // Constant rotation for magical feel
             meshRef.current.rotation.x += delta * 0.5;
             meshRef.current.rotation.y += delta * 1.0;
+            
+            // Animation Targets
+            const targetScale = active ? 1 : 0;
+            const targetY = active ? 0.3 : 0;
+
+            // Lerp towards target (Simulate Spring)
+            currentScale.current = THREE.MathUtils.lerp(currentScale.current, targetScale, delta * 6);
+            currentY.current = THREE.MathUtils.lerp(currentY.current, targetY, delta * 6);
+
+            meshRef.current.scale.setScalar(currentScale.current);
+            meshRef.current.position.set(0, currentY.current, 0);
         }
     });
 
-    // Reveal Animation
-    const { scale, pos } = useSpring({
-        scale: active ? 1 : 0,
-        pos: active ? [0, 0.3, 0] : [0, 0, 0], // Float up when active
-        config: { tension: 120, friction: 14 }
-    });
-
     return (
-        <animated.mesh
+        <mesh
             ref={meshRef}
-            scale={scale}
-            position={pos as any} 
+            scale={0} // Initial scale
         >
             <icosahedronGeometry args={[0.12, 0]} />
             <meshStandardMaterial
@@ -116,7 +122,7 @@ const GiftContent = ({ color, active }: { color: string, active: boolean }) => {
                 metalness={0.5}
                 toneMapped={false} // Enhance bloom
             />
-        </animated.mesh>
+        </mesh>
     );
 };
 
@@ -129,7 +135,13 @@ interface GiftBoxProps {
 const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   const [active, setActive] = useState(false);
   const [loading, setLoading] = useState(false);
+  
   const groupRef = useRef<THREE.Group>(null);
+  const lidGroupRef = useRef<THREE.Group>(null);
+  const lightRef = useRef<THREE.PointLight>(null);
+
+  // Animation State
+  const anim = useRef({ lidRot: 0, lightIntensity: 0 });
   
   // CONSTANTS
   const SIZE = 0.5;
@@ -139,11 +151,13 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
 
   const [initialRotation] = useState(() => [0, Math.random() * Math.PI, 0] as [number, number, number]);
 
-  // Loading Vibration Effect
-  useFrame((state) => {
+  // Combined Animation Loop
+  useFrame((state, delta) => {
+    const t = state.clock.getElapsedTime();
+
+    // 1. Loading Vibration Effect
     if (loading && groupRef.current) {
        // Fast jitter to indicate "something is happening"
-       const t = state.clock.getElapsedTime();
        groupRef.current.rotation.z = Math.sin(t * 40) * 0.03;
        groupRef.current.rotation.x = Math.cos(t * 35) * 0.03;
        groupRef.current.scale.setScalar(1 + Math.sin(t * 10) * 0.02);
@@ -152,6 +166,21 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
         groupRef.current.rotation.z = 0;
         groupRef.current.rotation.x = 0;
         groupRef.current.scale.setScalar(1);
+    }
+
+    // 2. Opening Animation
+    const targetLidRot = active ? -Math.PI / 1.5 : 0;
+    const targetIntensity = active ? 3.0 : 0.0;
+    
+    // Smooth transitions
+    anim.current.lidRot = THREE.MathUtils.lerp(anim.current.lidRot, targetLidRot, delta * 8);
+    anim.current.lightIntensity = THREE.MathUtils.lerp(anim.current.lightIntensity, targetIntensity, delta * 8);
+
+    if (lidGroupRef.current) {
+        lidGroupRef.current.rotation.x = anim.current.lidRot;
+    }
+    if (lightRef.current) {
+        lightRef.current.intensity = anim.current.lightIntensity;
     }
   });
 
@@ -204,12 +233,6 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
     return merged;
   }, [SIZE, LID_H, WALL]);
 
-  const { lidRot, lightIntensity } = useSpring({
-    lidRot: active ? -Math.PI / 1.5 : 0, 
-    lightIntensity: active ? 3.0 : 0.0,
-    config: { tension: 200, friction: 20 }
-  });
-
   const handleClick = async (e: any) => {
     e.stopPropagation();
     
@@ -260,9 +283,10 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
             <GiftContent color={gift.color} active={active} />
             
             {/* INTERNAL LIGHTING */}
-            <animated.pointLight 
+            <pointLight 
+                ref={lightRef}
                 color={gift.color} 
-                intensity={lightIntensity} 
+                intensity={0} // Controlled by useFrame
                 distance={2} 
                 decay={2} 
                 position={[0, 0.2, 0]}
@@ -271,8 +295,7 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
 
         {/* --- 2. ANIMATED LID GROUP --- */}
         {/* Pivot point at the top-back edge of the box */}
-        {/* @ts-ignore */}
-        <animated.group position={[0, SIZE, -HALF]} rotation-x={lidRot}>
+        <group ref={lidGroupRef} position={[0, SIZE, -HALF]}>
             {/* Shift back to center relative to pivot */}
             <group position={[0, 0, HALF]}>
                 
@@ -294,7 +317,7 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
                 </group>
 
             </group>
-        </animated.group>
+        </group>
       </group>
 
       {/* Shadow Decal on Floor */}
