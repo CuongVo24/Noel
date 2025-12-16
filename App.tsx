@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { GameProvider, useGame } from './context/GameContext';
 import { audioManager } from './utils/audio';
 import { DecorationType, Decoration } from './types';
+import { addDecorationToDB } from './utils/firebase';
 
 // UI Layouts
 import { Overlay } from './components/Overlay';
@@ -51,7 +52,8 @@ const GameLayout = () => {
             timestamp: Date.now()
         };
         
-        dispatch({ type: 'ADD_DECORATION', payload: newDec });
+        // MIGRATION: Write to Firebase instead of local dispatch
+        addDecorationToDB(newDec);
         audioManager.playChime();
     } else {
         // CLICK INTERACTION -> OPEN MODAL
@@ -59,7 +61,7 @@ const GameLayout = () => {
         setPendingNormal(normal || new THREE.Vector3(0, 1, 0));
         setDecorationMessage(''); 
     }
-  }, [state.isLit, state.userColor, state.userName, dispatch]);
+  }, [state.isLit, state.userColor, state.userName]);
 
   const handleConfirmDecoration = (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +78,9 @@ const GameLayout = () => {
         timestamp: Date.now()
     };
     
-    dispatch({ type: 'ADD_DECORATION', payload: newDec });
+    // MIGRATION: Write to Firebase instead of local dispatch
+    addDecorationToDB(newDec);
+    
     audioManager.playChime(); 
     setPendingPosition(null);
     setPendingNormal(null);

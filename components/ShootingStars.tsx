@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import '../types';
 
 const Star = () => {
   const mesh = useRef<THREE.Mesh>(null);

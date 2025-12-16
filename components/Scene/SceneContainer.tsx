@@ -10,6 +10,8 @@ import { useQuality } from '../../hooks/useQuality';
 import { audioManager } from '../../utils/audio';
 import { DecorationType, Decoration } from '../../types';
 import { getSnowHeight } from '../../utils/snowMath';
+import { addDecorationToDB } from '../../utils/firebase';
+import '../../types'; // Import types for JSX
 
 // Components
 import { ChristmasTree } from '../Tree';
@@ -219,7 +221,6 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
   const handleAirdropExplosion = () => {
     audioManager.playFirework();
     setFireworksPos(new THREE.Vector3(0, 4.8, 0));
-    const newItems: Decoration[] = [];
     const types: DecorationType[] = ['orb', 'star', 'candy', 'stocking'];
     const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff'];
     const spawnCount = quality.tier === 'HIGH' ? 20 : 10;
@@ -230,7 +231,7 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
         const radiusAtY = 1.6 * (1 - ((y - 1.5) / 3.0));
         const theta = Math.random() * Math.PI * 2;
         
-        newItems.push({
+        const newItem: Decoration = {
             id: uuidv4(),
             position: [radiusAtY * Math.cos(theta), y, radiusAtY * Math.sin(theta)],
             type: types[Math.floor(Math.random() * types.length)],
@@ -238,9 +239,9 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
             sender: 'Santa',
             message: 'Ho Ho Ho!',
             timestamp: Date.now()
-        });
+        };
+        addDecorationToDB(newItem);
     }
-    dispatch({ type: 'ADD_DECORATIONS_BATCH', payload: newItems });
   };
 
   const handleDrop = (e: React.DragEvent) => {

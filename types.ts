@@ -1,3 +1,5 @@
+import React from 'react';
+
 export interface Player {
   id: string;
   name: string;
@@ -58,12 +60,15 @@ declare global {
       capsuleGeometry: any;
       octahedronGeometry: any;
       circleGeometry: any;
+      ringGeometry: any;
       sprite: any;
       spriteMaterial: any;
       points: any;
       pointsMaterial: any;
       bufferGeometry: any;
       bufferAttribute: any;
+      instancedMesh: any;
+      shaderMaterial: any;
       [elemName: string]: any;
     }
   }

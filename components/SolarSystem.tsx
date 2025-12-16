@@ -1,6 +1,7 @@
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import '../types';
 
 const PLANETS = [
   { name: 'Mercury', distance: 20, size: 0.8, color: '#A5A5A5', speed: 0.8 },

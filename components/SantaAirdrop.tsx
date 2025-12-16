@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { audioManager } from '../utils/audio';
+import '../types';
 
 interface SantaAirdropProps {
   isActive: boolean;

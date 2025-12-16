@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { audioManager } from '../utils/audio';
 import { useQuality } from '../hooks/useQuality';
+import '../types';
 
 interface CampfireProps {
   position: [number, number, number];

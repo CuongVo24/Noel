@@ -1,6 +1,7 @@
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import '../types';
 
 const Reindeer = ({ offset }: { offset: [number, number, number] }) => (
     <group position={offset}>

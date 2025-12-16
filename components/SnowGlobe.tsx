@@ -4,6 +4,7 @@ import { Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 import { SNOW_GLOBE_RADIUS } from '../constants';
 import { getSnowHeight } from '../utils/snowMath';
+import '../types';
 
 // Shared material props for consistent look
 const SNOW_MATERIAL_PROPS = {

@@ -1,4 +1,5 @@
 import React from 'react';
+import '../types';
 
 export const Snowman: React.FC<{ position: [number, number, number], rotation?: [number, number, number] }> = ({ position, rotation = [0,0,0] }) => {
   return (
