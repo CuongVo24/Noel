@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -6,6 +6,7 @@ import { GameProvider, useGame } from './context/GameContext';
 import { audioManager } from './utils/audio';
 import { DecorationType, Decoration } from './types';
 import { addDecorationToDB } from './utils/firebase';
+import { useWishStore } from './store/wishStore';
 
 // UI Layouts
 import { Overlay } from './components/Overlay';
@@ -22,6 +23,11 @@ const GameLayout = () => {
   const [decorationMessage, setDecorationMessage] = useState('');
   const [activeGiftMsg, setActiveGiftMsg] = useState<string | null>(null);
   const [airdropActive, setAirdropActive] = useState(false);
+
+  // OPTIMIZATION: Start fetching wishes in the background as soon as the app loads
+  useEffect(() => {
+    useWishStore.getState().checkAndRefill();
+  }, []);
 
   // Handlers
   const handleStart = (name: string, color: string) => {

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { audioManager } from '../utils/audio';
 import { useQuality } from '../hooks/useQuality';
@@ -43,6 +43,7 @@ const FlareLight = ({ active, startTime, offset }: { active: boolean, startTime:
 
 export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }) => {
   const quality = useQuality();
+  const { clock } = useThree();
   const fireGroupRef = useRef<THREE.Group>(null);
   const particlesRef = useRef<THREE.Points>(null);
   const mainLightRef = useRef<THREE.PointLight>(null); 
@@ -72,9 +73,10 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
   }, [particleCount]);
 
   const triggerFlare = useCallback(() => {
-      // Logic safety: If already flaring recently (within 500ms), ignore to prevent stacking
-      const now = Date.now();
-      if (flaring && (now - flareStartTime < 500)) return;
+      const now = clock.getElapsedTime();
+
+      // Logic safety: If already flaring recently (within 0.5s), ignore to prevent stacking
+      if (flaring && (now - flareStartTime < 0.5)) return;
 
       setFlaring(true);
       setFlareStartTime(now);
@@ -102,7 +104,7 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
               initialData.vel[i * 3 + 1] = 5.0 + Math.random() * 2.0; 
           }
       }
-  }, [flaring, flareStartTime, initialData, particleCount]);
+  }, [flaring, flareStartTime, initialData, particleCount, clock]);
 
   useEffect(() => {
     if (flareTrigger > lastTriggerRef.current) {
@@ -110,12 +112,6 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
         triggerFlare();
     }
   }, [flareTrigger, triggerFlare]);
-
-  // Hook to get THREE clock time for the lights
-  const [simTime, setSimTime] = useState(0);
-  useFrame((state) => {
-      setSimTime(state.clock.getElapsedTime());
-  });
 
   useFrame((state, delta) => {
     const time = state.clock.getElapsedTime();
@@ -210,7 +206,9 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
             particlesRef.current.geometry.attributes.color.needsUpdate = true;
         }
 
-        if (activeParticles === 0) {
+        // Auto-disable flaring if all particles are dead AND flare lights are done (2.0s duration)
+        const flareAge = time - flareStartTime;
+        if (activeParticles === 0 && flareAge > 2.0) {
             setFlaring(false);
         }
     } else {
@@ -250,9 +248,9 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
 
       {flaring && (
         <>
-            <FlareLight active={flaring} startTime={simTime} offset={[0.2, 0, 0]} />
-            <FlareLight active={flaring} startTime={simTime} offset={[-0.2, 0, 0.2]} />
-            <FlareLight active={flaring} startTime={simTime} offset={[0, 0, -0.2]} />
+            <FlareLight active={flaring} startTime={flareStartTime} offset={[0.2, 0, 0]} />
+            <FlareLight active={flaring} startTime={flareStartTime} offset={[-0.2, 0, 0.2]} />
+            <FlareLight active={flaring} startTime={flareStartTime} offset={[0, 0, -0.2]} />
         </>
       )}
 
@@ -292,7 +290,6 @@ export const Campfire: React.FC<CampfireProps> = ({ position, flareTrigger = 0 }
          />
       </points>
       
-      {/* UPDATED MAIN LIGHT: Shimmering and Brighter */}
       <pointLight 
         ref={mainLightRef} 
         color="#ff6f00" 

@@ -10,6 +10,7 @@ interface ConfettiExplosionProps {
 
 export const ConfettiExplosion: React.FC<ConfettiExplosionProps> = ({ position, color, onComplete }) => {
   const group = useRef<THREE.Group>(null);
+  const timeRef = useRef(0); // OPTIMIZATION: Use ref instead of state to avoid re-renders
   
   // Initialize particles with random velocity and slight color variations
   const [particles] = useState(() => {
@@ -26,13 +27,11 @@ export const ConfettiExplosion: React.FC<ConfettiExplosionProps> = ({ position, 
     }));
   });
   
-  const [time, setTime] = useState(0);
-
   useFrame((state, delta) => {
-      setTime(t => t + delta);
+      timeRef.current += delta;
       
       // End lifecycle after 0.8 seconds
-      if (time > 0.8) {
+      if (timeRef.current > 0.8) {
           onComplete();
           return;
       }
@@ -55,7 +54,7 @@ export const ConfettiExplosion: React.FC<ConfettiExplosionProps> = ({ position, 
               mesh.rotation.y += p.rotation.y * delta * 5;
               
               // Scale Down (Shrink to zero)
-              const lifeRatio = time / 0.8;
+              const lifeRatio = timeRef.current / 0.8;
               const scale = p.scale * (1 - lifeRatio);
               mesh.scale.setScalar(Math.max(0, scale));
           });

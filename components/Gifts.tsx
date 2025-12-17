@@ -6,6 +6,7 @@ import { Gift } from '../types';
 import { getSnowHeight } from '../utils/snowMath';
 import { generateGenZWish } from '../utils/gemini';
 import { audioManager } from '../utils/audio';
+import { useWishStore } from '../store/wishStore';
 
 // Static mock gifts with Natural Vietnamese Jokes (Sarcastic & Funny)
 // Repositioned to avoid clipping with the tree (Radius > 2.5)
@@ -203,7 +204,6 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
   });
 
   // --- GEOMETRIES ---
-
   // Body: Floor + 4 Walls
   const bodyGeo = useMemo(() => {
     const geos = [];
@@ -256,18 +256,26 @@ const HollowGiftBox: React.FC<GiftBoxProps> = ({ gift, onOpen }) => {
     
     // If already open, just re-show the message (no AI call)
     if (active) {
-        onOpen(gift.message); // Fallback to current message state?
+        onOpen(gift.message); 
+        return;
+    }
+    if (loading) return;
+
+    // OPTIMIZATION: Try to get a wish from the pre-fetched cache first
+    const cachedWish = useWishStore.getState().consumeWish();
+    if (cachedWish) {
+        // INSTANT OPEN
+        setActive(true);
+        onOpen(cachedWish);
+        audioManager.playChime();
         return;
     }
 
-    if (loading) return;
-
-    // Start Loading Sequence
+    // FALLBACK: If cache is empty, do the old slow shake & fetch
     setLoading(true);
-    // Trigger Rattle Sound (Existing function works well for a shake start)
     audioManager.playSleighBells(); 
 
-    // Fetch Unique Wish from Gemini
+    // Fetch Unique Wish from Gemini (Legacy Single Fetch)
     let finalMessage = gift.message; // Default fallback
     try {
         const genZWish = await generateGenZWish();
