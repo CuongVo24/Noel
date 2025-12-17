@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Access API Key from environment variables as per system configuration
 // The build environment is expected to inject this value.
@@ -12,10 +12,10 @@ export const generateGenZWish = async (): Promise<string> => {
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: apiKey });
+    const ai = new GoogleGenerativeAI({ apiKey: apiKey });
     // Using 'gemini-2.5-flash' as it is efficient for short text generation
     const model = "gemini-2.5-flash";
-    const prompt = "Đóng vai một người bạn thân cực kỳ lầy lội, phũ mồm nhưng hài hước. Hãy viết 1 câu troll (trêu chọc) ngắn gọn về Giáng Sinh (dưới 25 từ). Chủ đề: Đòi quà, than nghèo, trêu ế, bóc phốt. Tuyệt đối KHÔNG dùng văn mẫu sến súa. KHÔNG dùng từ ngữ gượng gạo kiểu 'keo lỳ', 'tái châu'. Ví dụ: 'Lớn đầu rồi đừng đòi quà nữa', 'Tầm này liêm sỉ gì nữa', 'Alo mẹ à, con không về đâu'.";
+    const prompt = "Đóng vai một người bạn thân sinh viên cực kỳ lầy lội hơi dâm xíu, phũ mồm nhưng hài hước. Hãy viết 1 câu troll (trêu chọc) ngắn gọn về Giáng Sinh (dưới 25 từ). Chủ đề: Đòi quà, than nghèo, trêu ế, bóc phốt, qua môn. Tuyệt đối KHÔNG dùng văn mẫu sến súa. KHÔNG dùng từ ngữ gượng gạo kiểu 'keo lỳ', 'tái châu'. Ví dụ: 'Lớn đầu rồi đừng đòi quà nữa', 'Tầm này liêm sỉ gì nữa', 'Alo mẹ à, con không về đâu'.";
 
     const response = await ai.models.generateContent({
       model: model,
