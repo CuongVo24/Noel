@@ -1,0 +1,66 @@
+Hiệu năng và phân bổ bộ nhớ
+Tạo object/array mới liên tục trong render/useFrame:
+
+ConfettiExplosion tạo new THREE.Color(color).offsetHSL(...) cho từng phần tử trong useState ban đầu là ổn, nhưng trong useFrame dùng time từ useState rồi mỗi frame gọi setTime khiến React re-render lại component mỗi frame, tăng chi phí không cần thiết. Nên lưu thời gian bằng useRef thay vì state, hoặc logic thuần trong useFrame.​
+
+FloatingTextManager trong Overlay dùng setTimeout trong onAnimationComplete cho từng message để tự xoá; nếu nhiều quà được mở liên tục sẽ tạo rất nhiều timer khó kiểm soát, nên gom bằng một effect dọn dẹp dựa trên timestamp.​
+
+State thay vì ref trong loop animation:
+
+Campfire có const [simTime, setSimTime] = useState(0); rồi mỗi useFrame lại setSimTime(...), tương đương 60 lần setState/giây → re-render toàn bộ component Campfire. Thông tin này chỉ dùng để truyền vào FlareLight, nên nên chuyển thành useRef hoặc lấy trực tiếp state.clock.getElapsedTime() trong mỗi FlareLight.​
+
+Tương tự, nhiều component dùng useState chỉ để lưu tiến trình animation trong useFrame (ví dụ ConfettiExplosion, HollowGiftBox với anim.current là đúng hướng, nhưng loading/active điều khiển nhiều nhánh render phức tạp).​
+
+Tạo geometry/material mới trong render mà không dispose:
+
+Một số nơi dùng new THREE.MeshStandardMaterial(...) trong useMemo là đúng, nhưng không thấy dispose khi unmount (ngoại trừ glowTexture trong ChristmasTree được dispose chuẩn). Với scene lớn và reload nhiều lần, có nguy cơ rò rỉ GPU memory, nhất là starGeometry, OrganicSnowCap geometry, các geometry merge bằng mergeGeometries.​
+
+Logic bất nhất / bug tiềm ẩn
+Phụ thuộc nhưng không khai báo trong dependency array:
+
+handleAirdropExplosion trong SceneContainer sử dụng addDecorationToDB và audioManager, nhưng dependency array chỉ có [addFirework, quality.tier]. Khi logic DB hoặc audio thay đổi (hoặc hot reload), callback có thể dùng bản cũ. Nên thêm đầy đủ dependencies.​
+
+triggerFlare trong Campfire phụ thuộc audioManager, particlesRef.current, nhưng dependency chỉ gồm [flaring, flareStartTime, initialData, particleCount]. Điều này không gây bug ngay, nhưng khiến ESLint-hooks cảnh báo và có thể dùng closure cũ khi ref thay đổi.​
+
+Race condition với timer và state:
+
+FloatingTextManager thêm message mới mỗi khi activeMessage đổi; Overlay lại xoá activeGiftMessage ở parent sau 100ms. Nếu người dùng mở nhiều hộp rất nhanh, có thể mất một số thông điệp hoặc thứ tự hiển thị không đúng. Cần cơ chế queue ở một chỗ duy nhất (hoặc chỉ lưu trong context VFX/Overlay).​
+
+SantaAirdrop dùng setTimer(prev => prev + delta) trong useFrame và đồng thời đọc timer trong cùng frame; do setState async, việc so sánh timer > 3 dùng giá trị frame trước, tạo độ trễ 1 frame và làm logic khó đọc. Nên dùng useRef cho timer trong loop.​
+
+Kiểm tra null chưa đủ chặt:
+
+DecorationMeshComponent xử lý data.normal khá cẩn thận, nhưng khi data.position không phải array độ dài 3 (dữ liệu lỗi từ backend) vẫn dùng trực tiếp vào position={data.position}, có thể khiến Three.js lỗi runtime. Nên validate tương tự như normal.​
+
+Trong SimulatedUsers, trong useFrame có const child = groupRef.current?.children[i]; rồi child.position.copy(u.pos); — nếu cấu trúc children thay đổi (ví dụ thêm mesh mới vào group), index lệch sẽ khiến một số child không còn là user mesh. Cần gắn ref riêng cho từng user hoặc giữ group riêng cho user avatars.​
+
+Thiết kế trạng thái & kiến trúc
+Store VFX nhưng logic điều khiển rải rác:
+
+VFXManager đọc fireworks, explosions, meteors từ store rồi render, nhưng logic tạo (spawn) lại rải trong SceneContainer, Campfire, FlyingSanta, SantaAirdrop. Điều này khiến debug khó: muốn tắt pháo hoa phải đi qua nhiều file. Nên gom API spawn VFX thành module chung (ví dụ useVFX custom hook) để đảm bảo mọi spawn đều đi qua một cổng (có thể giới hạn số lượng, bật/tắt chất lượng).​
+
+Hook phụ thuộc context nhưng không xử lý khi context chưa sẵn sàng:
+
+SceneContainer, Overlay, SimulatedUsers đều dùng useGame() nhưng code giả định state luôn có đủ trường (state.snowAmount, state.decorations, state.gameState). Nếu Context provider chưa mount (hoặc trong test), sẽ crash. Nên thêm guard trong useGame hoặc tạo giá trị mặc định rõ ràng.​
+
+UX / tương tác
+Thao tác phím không thể tuỳ biến và khó khám phá:
+
+InteractionController hard-code phím g, h, j cho hiệu ứng, không hiển thị hướng dẫn trong UI trừ dòng nhỏ ở header "Drag items to decorate - Click stars". Người dùng mới khó phát hiện. Nên thêm legend nhỏ (tooltip / overlay) hiển thị phím tắt, hoặc cho phép cấu hình.​
+
+Cursor global bị chỉnh trực tiếp:
+
+Nhiều component (Campfire, FlyingSanta) gán document.body.style.cursor = 'pointer' / 'auto'. Nếu nhiều component cùng thay đổi, trạng thái cursor trở nên không dự đoán được (component A set pointer, B set auto). Tốt hơn nên dùng CSS cursor: pointer trên element tương ứng (div canvas overlay) hoặc một context quản lý cursor.​
+
+Thông điệp tiếng Việt có emoji trong 3D, có thể gây vấn đề font:
+
+STATIC_GIFTS dùng nhiều câu dài + emoji; nếu font WebGL không hỗ trợ đầy đủ, có thể render xấu hoặc vỡ dòng khó đọc, nhưng đây là vấn đề UX chứ không phải bug logic.​
+
+Khả năng tái sử dụng & bảo trì
+Nhiều số “magic number” rải rác:
+
+Ví dụ bán kính, tốc độ, số lượng hạt (1500 sparkles, 300 particles pháo hoa, SNOW_GLOBE_RADIUS * 1.8, các khoảng thời gian 0.8, 1.5, 2.5 trong supernova). Khi muốn chỉnh cho phù hợp thiết bị yếu, phải sửa rất nhiều nơi. Nên gom thành constants (ví dụ VFX_CONFIG) và dùng useQuality để scale.​
+
+Dùng any làm type cho nhiều props/callback:
+
+Trong SceneContainer, handleBackgroundClick dùng e: any, InteractionController nhận props as any. Điều này bỏ qua kiểm tra kiểu TypeScript, dễ khiến sai dùng API của drei/fiber mà không được phát hiện ở compile-time. Cần định nghĩa type rõ ràng (ví dụ ThreeEvent<MouseEvent> cho pointer events)
