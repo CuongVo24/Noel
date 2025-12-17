@@ -21,7 +21,7 @@ export const generateWishBatch = async (): Promise<string[]> => {
     const prompt = `
       Đóng vai một người bạn thân Gen Z Việt Nam cực lầy lội, hài hước nhưng rất có chất xám, mồm phũ thông minh kiểu "troll bằng IQ", biết inside joke tinh tế
       Hãy viết 10 câu chúc/troll Giáng Sinh ngắn gọn (dưới 20 từ mỗi câu). 
-      Chủ đề đa dạng: Đòi quà, than ế, bóc phốt, chúc qua môn, cà khịa người yêu cũ, bóng đá, liên quân, showbiz Việt Nam.
+      Chủ đề đa dạng: than ế, chúc qua môn, cà khịa người yêu cũ, bóng đá, liên quân, showbiz Việt Nam, học tập, âm nhạc(indie)
       
       YÊU CẦU BẮT BUỘC:
       1. Trả về kết quả là một JSON Array chứa các chuỗi string (List<String>).
