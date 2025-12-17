@@ -1,5 +1,5 @@
-import React, { Suspense, useState, useRef, useEffect, memo, useMemo, useLayoutEffect } from 'react';
-import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import React, { Suspense, useState, useEffect, memo, useMemo, useRef, useCallback } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, CameraShake } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
@@ -11,6 +11,7 @@ import { audioManager } from '../../utils/audio';
 import { DecorationType, Decoration } from '../../types';
 import { getSnowHeight } from '../../utils/snowMath';
 import { addDecorationToDB } from '../../utils/firebase';
+import { useVFXStore } from '../../store/vfxStore';
 import '../../types'; // Import types for JSX
 
 // Components
@@ -20,87 +21,16 @@ import { SimulatedUsers } from '../SimulatedUsers';
 import { Gifts } from '../Gifts';
 import { Campfire } from '../Campfire';
 import { WillOTheWisp } from '../WillOTheWisp';
-import { Fireworks } from '../Fireworks';
 import { SantaAirdrop } from '../SantaAirdrop';
-// import { SolarSystem } from '../SolarSystem'; // REMOVED
-import { CosmicBackground } from '../CosmicBackground'; // ADDED
-import { AuroraBorealis } from '../AuroraBorealis'; // ADDED
-import { FlyingSanta } from '../FlyingSanta'; // ADDED
-import { ConfettiExplosion } from '../VFX/ConfettiExplosion'; // ADDED
+import { CosmicBackground } from '../CosmicBackground';
+import { AuroraBorealis } from '../AuroraBorealis';
+import { FlyingSanta } from '../FlyingSanta';
+import { VFXManager } from '../VFX/VFXManager'; 
 
 // --- MEMOIZED COMPONENTS ---
 const MemoizedTree = memo(ChristmasTree);
 const MemoizedGlobe = memo(SnowGlobe);
 const MemoizedGifts = memo(Gifts);
-
-// --- METEOR COMPONENT ---
-interface MeteorProps {
-    startPos: THREE.Vector3;
-    endPos: THREE.Vector3;
-    onComplete: () => void;
-}
-
-const Meteor: React.FC<MeteorProps> = ({ startPos, endPos, onComplete }) => {
-    const meshRef = useRef<THREE.Mesh>(null);
-    const groupRef = useRef<THREE.Group>(null);
-    const progressRef = useRef(0);
-    const trailRef = useRef<THREE.Mesh>(null);
-
-    // Initial setup for Position and Rotation
-    useLayoutEffect(() => {
-        // Set initial position immediately to avoid flicker or prop conflict
-        if (meshRef.current) {
-            meshRef.current.position.copy(startPos);
-        }
-        
-        // Calculate orientation to look at end position
-        if (groupRef.current) {
-            const dummy = new THREE.Object3D();
-            dummy.position.copy(startPos);
-            dummy.lookAt(endPos);
-            // Adjust for cylinder default orientation (Y-up) to point forward (Z)
-            dummy.rotateX(-Math.PI / 2);
-            groupRef.current.quaternion.copy(dummy.quaternion);
-        }
-    }, [startPos, endPos]);
-
-    useFrame((state, delta) => {
-        progressRef.current += delta * 1.5; // Speed
-        
-        if (progressRef.current >= 1.0) {
-            onComplete();
-            return;
-        }
-
-        if (meshRef.current) {
-            meshRef.current.position.lerpVectors(startPos, endPos, progressRef.current);
-            // Spin
-            meshRef.current.rotation.z += 10 * delta;
-            
-            // Tail scaling logic
-            if (trailRef.current) {
-                const tailScale = 1.0 - progressRef.current; // Shrink as it goes
-                trailRef.current.scale.y = 5 + (tailScale * 5);
-            }
-        }
-    });
-
-    return (
-        <group ref={groupRef}>
-             {/* Note: DO NOT pass position prop here. We handle it in useLayoutEffect/useFrame to avoid read-only conflict */}
-             <mesh ref={meshRef}>
-                <sphereGeometry args={[0.3, 8, 8]} />
-                <meshBasicMaterial color="#ffffff" toneMapped={false} />
-                
-                {/* Tail */}
-                <mesh ref={trailRef} position={[0, -2, 0]}>
-                    <cylinderGeometry args={[0.02, 0.3, 8, 8]} />
-                    <meshBasicMaterial color="#ffffff" transparent opacity={0.4} />
-                </mesh>
-            </mesh>
-        </group>
-    );
-};
 
 // Helper for Scene Lighting
 const SceneLighting = ({ isLit, shadowsEnabled }: { isLit: boolean, shadowsEnabled: boolean }) => {
@@ -177,16 +107,15 @@ const DropRaycaster = ({
 
 // --- INTERACTION CONTROLLER ---
 const InteractionController = ({ 
-    setFireworksPos, 
     setSuperNovaTrigger, 
     setHeatWaveIntensity, 
     setGlobalFlareTrigger,
     setAirdropActive,
-    setShakeIntensity
 }: any) => {
     const { state } = useGame();
     const lastKeyTime = useRef(0);
     const lastFlareTime = useRef(0);
+    const addFirework = useVFXStore(s => s.addFirework);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -208,14 +137,15 @@ const InteractionController = ({
                 setAirdropActive(true);
             } else if (e.key.toLowerCase() === 'j') {
                 lastKeyTime.current = now;
-                setFireworksPos(new THREE.Vector3(0, 4.8, 0));
+                // Directly trigger firework via store
+                addFirework(new THREE.Vector3(0, 4.8, 0));
                 setSuperNovaTrigger(now);
                 audioManager.playFirework();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [state.gameState]);
+    }, [state.gameState, addFirework, setGlobalFlareTrigger, setHeatWaveIntensity, setAirdropActive, setSuperNovaTrigger]);
     
     return null;
 };
@@ -252,21 +182,21 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
     airdropActive, 
     setAirdropActive 
 }) => {
-  const { state, dispatch } = useGame();
+  const { state } = useGame();
   const quality = useQuality();
 
-  const [fireworksPos, setFireworksPos] = useState<THREE.Vector3 | null>(null);
   const [superNovaTrigger, setSuperNovaTrigger] = useState(0);
   const [shakeIntensity, setShakeIntensity] = useState(0);
   const [globalFlareTrigger, setGlobalFlareTrigger] = useState(0);
   const [heatWaveIntensity, setHeatWaveIntensity] = useState(0);
-  
-  // VFX State
-  const [explosions, setExplosions] = useState<{ id: string, position: THREE.Vector3, color: string }[]>([]);
-  const [meteors, setMeteors] = useState<{ id: string, startPos: THREE.Vector3, endPos: THREE.Vector3 }[]>([]);
 
   // Drop State
   const [dropEvent, setDropEvent] = useState<{ x: number, y: number, type: DecorationType } | null>(null);
+
+  // Get Store Actions (Stable)
+  const addFirework = useVFXStore(s => s.addFirework);
+  const addExplosion = useVFXStore(s => s.addExplosion);
+  const spawnMeteor = useVFXStore(s => s.spawnMeteor);
 
   // Shake Decay Loop
   useEffect(() => {
@@ -279,7 +209,7 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
   }, [state.gameState]);
 
   // Wrapper for Decoration Placement to trigger Sensory Feedback
-  const handleDecorate = (point: THREE.Vector3, normal?: THREE.Vector3, type?: DecorationType) => {
+  const handleDecorate = useCallback((point: THREE.Vector3, normal?: THREE.Vector3, type?: DecorationType) => {
       // 1. Audio Feedback
       if (type) {
           audioManager.playDropSound(type);
@@ -287,59 +217,36 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
           audioManager.playChime(); // Fallback for modal clicks
       }
 
-      // 2. Visual Feedback (Confetti)
-      const explosionId = uuidv4();
-      setExplosions(prev => [...prev, { id: explosionId, position: point, color: state.userColor }]);
+      // 2. Visual Feedback (Confetti via Store)
+      addExplosion(point, state.userColor);
 
       // 3. Original Logic
       onDecorateStart(point, normal, type);
-  };
-
-  const removeExplosion = (id: string) => {
-      setExplosions(prev => prev.filter(e => e.id !== id));
-  };
-
-  const removeMeteor = (id: string) => {
-      setMeteors(prev => prev.filter(m => m.id !== id));
-  };
+  }, [onDecorateStart, state.userColor, addExplosion]);
 
   const handlePointerMove = (e: React.PointerEvent) => {
       const speed = Math.abs(e.movementX) + Math.abs(e.movementY);
       if (speed > 5) setShakeIntensity(prev => Math.min(1.5, prev + speed * 0.002));
   };
 
-  const handleStarClick = (pos: THREE.Vector3) => {
-    setFireworksPos(pos);
+  const handleStarClick = useCallback((pos: THREE.Vector3) => {
+    addFirework(pos);
     audioManager.playFirework();
-  };
+  }, [addFirework]);
 
-  const handleBackgroundClick = (e: any) => {
+  const handleBackgroundClick = useCallback((e: any) => {
       e.stopPropagation();
       // Only trigger if we click "far away" (the background)
       if (e.distance > 100) {
           audioManager.playMeteorWhoosh();
-          
-          const id = uuidv4();
-          // Generate random start and end points in the sky dome
-          const startX = (Math.random() - 0.5) * 200;
-          const startY = 50 + Math.random() * 50;
-          const startZ = -100; // Far back
-
-          const endX = startX + (Math.random() - 0.5) * 100;
-          const endY = startY - (30 + Math.random() * 20);
-          const endZ = startZ + (Math.random() - 0.5) * 50;
-
-          setMeteors(prev => [...prev, {
-              id,
-              startPos: new THREE.Vector3(startX, startY, startZ),
-              endPos: new THREE.Vector3(endX, endY, endZ)
-          }]);
+          spawnMeteor();
       }
-  };
+  }, [spawnMeteor]);
 
-  const handleAirdropExplosion = () => {
+  const handleAirdropExplosion = useCallback(() => {
     audioManager.playFirework();
-    setFireworksPos(new THREE.Vector3(0, 4.8, 0));
+    addFirework(new THREE.Vector3(0, 4.8, 0));
+    
     const types: DecorationType[] = ['orb', 'star', 'candy', 'stocking'];
     const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff'];
     const spawnCount = quality.tier === 'HIGH' ? 20 : 10;
@@ -361,7 +268,7 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
         };
         addDecorationToDB(newItem);
     }
-  };
+  }, [addFirework, quality.tier]);
 
   const handleDrop = (e: React.DragEvent) => {
       e.preventDefault();
@@ -391,16 +298,17 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
         onDrop={handleDrop}
     >
         <Canvas shadows={quality.shadowsEnabled} dpr={quality.dpr}>
+            {/* NEW: VFX Manager handles Fireworks, Confetti, and Meteors */}
+            <VFXManager />
+
             {/* Internal Controller for Raycasting - Uses Wrapped HandleDecorate */}
             <DropRaycaster dropEvent={dropEvent} onDecorate={handleDecorate} />
 
             <InteractionController 
-                setFireworksPos={setFireworksPos}
                 setSuperNovaTrigger={setSuperNovaTrigger}
                 setHeatWaveIntensity={setHeatWaveIntensity}
                 setGlobalFlareTrigger={setGlobalFlareTrigger}
                 setAirdropActive={setAirdropActive}
-                setShakeIntensity={setShakeIntensity}
             />
 
             <PerspectiveCamera makeDefault position={[0, 10, 25]} fov={45} near={0.01} />
@@ -459,33 +367,6 @@ export const SceneContainer: React.FC<SceneContainerProps> = ({
                     onComplete={() => setAirdropActive(false)}
                     onExplode={handleAirdropExplosion}
                 />
-
-                {fireworksPos && (
-                    <Fireworks 
-                        position={[fireworksPos.x, fireworksPos.y, fireworksPos.z]} 
-                        onComplete={() => setFireworksPos(null)} 
-                    />
-                )}
-
-                {/* Render Confetti Explosions */}
-                {explosions.map(exp => (
-                    <ConfettiExplosion 
-                        key={exp.id} 
-                        position={exp.position} 
-                        color={exp.color} 
-                        onComplete={() => removeExplosion(exp.id)} 
-                    />
-                ))}
-
-                {/* Render Meteors */}
-                {meteors.map(m => (
-                    <Meteor 
-                        key={m.id}
-                        startPos={m.startPos}
-                        endPos={m.endPos}
-                        onComplete={() => removeMeteor(m.id)}
-                    />
-                ))}
 
                 <group position={cf1} scale={1.5}>
                     <Campfire position={[0, 0, 0]} flareTrigger={globalFlareTrigger} />
